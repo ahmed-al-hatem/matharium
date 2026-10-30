@@ -1,3 +1,5 @@
+import type { Step } from './steps';
+
 export interface Vec2 { x: number; y: number }
 export interface Vec3 { x: number; y: number; z: number }
 
@@ -15,8 +17,15 @@ export interface MObj {
   visible: boolean;
   showLabel?: boolean;
   lineWidth?: number;
-  slider?: { min: number; max: number; step: number };
+  slider?: { min: number; max: number; step: number; speed?: number; mode?: AnimMode };
+  /** leave a trace of the point's positions while it moves */
+  trace?: boolean;
+  /** Value line shown as a decimal (true) or exact (false); unset follows Settings.exact. */
+  approx?: boolean;
 }
+
+/** How an animated slider moves: back and forth, increasing and wrapping around, or once up to max. */
+export type AnimMode = 'oscillate' | 'increase' | 'once';
 
 export type Value =
   | { type: 'function'; f: Fn1; param: string; tex: string; node?: unknown; ineq?: RelOp }
@@ -63,6 +72,12 @@ export interface Resolved {
   tex: string;
   /** Human readable value line (e.g. "= 2.83", "x = ±2") */
   display?: string;
+  /** Exact form of `display` (fractions, √, π); undefined when it would read the same */
+  exact?: string;
+  /** Worked solution (Solve, Derivative, Factor), built on first call; null when no steps apply */
+  steps?: () => Step[] | null;
+  /** Show the steps expanded (the Steps command) */
+  stepsOpen?: boolean;
   /** symbols that were undefined (used to auto-create sliders) */
   missing?: string[];
 }

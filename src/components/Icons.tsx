@@ -44,4 +44,8 @@ export const Icon = {
   label: () => <I><path d="M4 7h16M4 12h10M4 17h7" /></I>,
   template: () => <I><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M10 10v10" /></I>,
   print: () => <I><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2" /><path d="M7 14h10v6H7z" /></I>,
+  stop: () => <I><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none" /></I>,
+  video: () => <I><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-3v10l-5-3z" /></I>,
+  trace: () => <I><path d="M4 18c3-1 4-6 7-7s4 3 7 1" strokeDasharray="2 3" /><circle cx="19" cy="11" r="2" fill="currentColor" /></I>,
+  eraser: () => <I><path d="m14 5 5 5-8 8H7l-3-3z" /><path d="M10 9l5 5M11 18h9" /></I>,
 };

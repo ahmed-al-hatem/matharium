@@ -25,9 +25,11 @@ test('builds a construction with tools and keeps dependents in sync while draggi
 
   await showPanel(page, 'Algebra');
   const values = page.locator('.alg-value');
-  await expect(values.filter({ hasText: 'area' })).toHaveText('area = 12.5');
+  await expect(values.filter({ hasText: 'area' }).locator('span')).toHaveText('area = 25/2');
+  await values.filter({ hasText: 'area' }).getByRole('button', { name: 'Show decimal value' }).click();
+  await expect(values.filter({ hasText: 'area' }).locator('span')).toHaveText('area = 12.5');
   // angles follow the angle unit setting (radians by default)
-  await expect(values.filter({ hasText: 'rad' })).toHaveText('= 1.3258 rad');
+  await expect(values.filter({ hasText: 'rad' }).locator('span')).toHaveText('= 1.3258 rad');
 
   // drag D from (-1, 2) to (0, 3)
   await pickTool(page, 'Move');

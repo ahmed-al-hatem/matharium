@@ -1,8 +1,12 @@
 import type { MathNode } from 'mathjs';
 import { compileFn, freeSymbols, isKnownName, math, parseExpr, setAngleUnit, texName, toTex, UndefinedSymbolError, type AngleUnit, type Scope } from './compile';
-import { asCommand, asList, asTuple, normalize, splitDefinition, splitRelation } from './parser';
+import { asCommand, asList, asPolar, asPolarCurve, asTuple, normalize, splitDefinition, splitRelation } from './parser';
 import { clean, extrema, fmt, fmtPt, integrate, derivative as numDeriv, roots, solveSystem } from './solve';
+import { exactRoots, factoredTex, factoredText, factorPoly, derivativePoly, polyCoefficients, toExact, type Exact } from './exact';
+import { derivativeSteps, factorSteps, solveSteps, systemSteps, type Step } from './steps';
 import { angle, asLine, canHostPoint, circleThrough, dist, implicitOf, intersectGeom, mid, paramRange, pointAt, polygonArea, projectOnLine, sub } from './geometry';
+import { FITS, fitExpr } from './fit';
+import { polarRange, polarXY } from './polar';
 import { RIEMANN_RULES, polyAt, polyText, riemannSum, solveODE, taylorCoeffs, type RiemannRule } from './calculus';
 import { binomialPmf, fiveNumber, histogram, mean, median, normalCdf, normalPdf, sd } from './stats';
 import { evalSheet } from './sheet';
@@ -11,8 +15,18 @@ import type { Fn1, Fn2, MObj, Resolved, Value, Vec2, Vec3 } from './types';
 
 const VARS = ['x', 'y', 'z', 't'];
 const NUM_LITERAL = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i;
+/** A number, optionally in degrees (normalize turns ° into *(pi/180)). */
+const ANGLE_LITERAL = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*(\*\(pi\/180\))?\s*$/i;
+const DEG_SUFFIX = /^([\s\S]*)\*\(pi\/180\)\s*$/;
 
-interface Out { value: Value; display?: string; tex?: string }
+interface Out {
+  value: Value; display?: string; tex?: string;
+  /** exact form of display, built only when shown */
+  exact?: () => string;
+  steps?: () => Step[] | null; stepsOpen?: boolean;
+}
+
+type Fmt = (v: number) => string;
 
 class EvalError extends Error {}
 
@@ -23,6 +37,8 @@ function tryTex(src: string): string {
   if (rel) return `${tryTex(rel.lhs)} ${({ '=': '=', '<': '<', '>': '>', '<=': '\\le', '>=': '\\ge' })[rel.op]} ${tryTex(rel.rhs)}`;
   const tup = asTuple(src);
   if (tup) return `\\left(${tup.map(tryTex).join(', ')}\\right)`;
+  const pol = asPolar(src);
+  if (pol) return `\\left(${tryTex(pol[0])};\\ ${angleTex(pol[1])}\\right)`;
   const list = asList(src);
   if (list) return `\\left\\{${list.map(tryTex).join(', ')}\\right\\}`;
   const cmd = asCommand(src);
@@ -32,6 +48,25 @@ function tryTex(src: string): string {
   } catch {
     return `\\text{${texEscape(src)}}`;
   }
+}
+
+function angleTex(src: string): string {
+  const m = DEG_SUFFIX.exec(src.trim());
+  return m ? `${tryTex(m[1])}^\\circ` : tryTex(src);
+}
+
+/** R² rounded down, so a good fit never shows as a perfect 1. */
+function r2Text(r2: number, digits: number) {
+  if (r2 >= 1 - 1e-12) return '1';
+  const p = 10 ** digits;
+  return fmt(Math.floor(r2 * p) / p, digits);
+}
+
+/** "6π", "2π", "π" for a θ bound. */
+function piText(v: number) {
+  const k = v / Math.PI;
+  if (Math.abs(k - Math.round(k)) < 1e-9) return Math.round(k) === 1 ? 'π' : `${Math.round(k)}π`;
+  return fmt(v, 4);
 }
 
 export class Engine {
@@ -46,6 +81,22 @@ export class Engine {
   private f(v: number) { return fmt(v, this.digits, this.opts.sigFigs); }
   private fp(p: Vec2) { return fmtPt(p, this.digits, this.opts.sigFigs); }
   private get deg() { return this.opts.angle === 'deg'; }
+
+  /** Decimal display plus a lazily built exact one (fractions, √, π) from the same template. */
+  private dual(make: (n: Fmt) => string, exactFmt?: Fmt): Pick<Out, 'display' | 'exact'> {
+    const ex = exactFmt ?? ((v: number) => toExact(v)?.text ?? this.f(v));
+    return { display: make((v) => this.f(v)), exact: () => make(ex) };
+  }
+
+  /** Exact roots of a polynomial node (null if not a polynomial), and a formatter that prefers them. */
+  private polyRoots(node: MathNode | undefined, param: string, deriv = false): { exact: Exact[] | null; complete: boolean; fmt: Fmt } {
+    let c = node ? polyCoefficients(node, param, this.scope) : null;
+    if (c && deriv) c = derivativePoly(c);
+    const r = c && c.length > 1 ? exactRoots(c) : null;
+    const exact = r?.roots ?? null;
+    const fmt: Fmt = (v) => exact?.find((e) => Math.abs(e.value - v) < 1e-6 * Math.max(1, Math.abs(v)))?.text ?? toExact(v)?.text ?? this.f(v);
+    return { exact, complete: !!r?.complete, fmt };
+  }
 
   register(name: string, v: Value) {
     this.values.set(name, v);
@@ -106,9 +157,20 @@ export class Engine {
     }
     const tup = asTuple(src);
     if (tup) return this.evalTuple(tup).value;
+    const pol = asPolar(src);
+    if (pol) return this.evalPolar(pol).value;
+    const list = asList(src);
+    if (list) return this.evalList(list);
     const cmd = asCommand(src);
     if (cmd) return this.command(cmd.name, cmd.args, 'tmp').value;
     return undefined;
+  }
+
+  /** Points of a list literal or a named list / polygon. */
+  ptList(src: string): Vec2[] {
+    const v = this.obj(src);
+    if (v?.type === 'points' || v?.type === 'polygon') return v.pts;
+    throw new EvalError(`Expected a list of points: ${src}`);
   }
 
   pt(src: string): Vec2 {
@@ -144,6 +206,12 @@ export class Engine {
     const rel = splitRelation(normalize(src));
     if (!rel) return this.node(src);
     return new math.OperatorNode('-', 'subtract', [this.node(rel.lhs), new math.ParenthesisNode(this.node(rel.rhs))]) as MathNode;
+  }
+
+  /** Both sides of an equation; an expression counts as expression = 0. */
+  sides(src: string): [MathNode, MathNode] {
+    const rel = splitRelation(normalize(src));
+    return rel ? [this.node(rel.lhs), this.node(rel.rhs)] : [this.node(src), new math.ConstantNode(0) as MathNode];
   }
 
   /** A function of x and y: a two-variable function object or an expression in x, y. */
@@ -186,12 +254,38 @@ export class Engine {
   evalTuple(parts: string[]): Out {
     const free = parts.every((p) => NUM_LITERAL.test(p));
     const c = parts.map((p) => clean(this.num(p)));
-    if (c.length === 3) return { value: { type: 'point3d', p: { x: c[0], y: c[1], z: c[2] } }, display: `(${c.map((v) => this.f(v)).join(', ')})` };
-    return { value: { type: 'point', p: { x: c[0], y: c[1] }, free }, display: free ? undefined : this.fp({ x: c[0], y: c[1] }) };
+    if (c.length === 3) return { value: { type: 'point3d', p: { x: c[0], y: c[1], z: c[2] } }, ...this.dual((n) => `(${c.map(n).join(', ')})`) };
+    return { value: { type: 'point', p: { x: c[0], y: c[1] }, free }, ...(free ? {} : this.ptDisplay({ x: c[0], y: c[1] })) };
   }
 
-  ptsDisplay(pts: Vec2[]) {
-    return pts.length ? pts.map((p) => this.fp(p)).join(', ') : 'none';
+  /** "(r; θ)": a point given by its distance from the origin and its angle. */
+  evalPolar([rs, ts]: [string, string]): Out {
+    const free = NUM_LITERAL.test(rs) && ANGLE_LITERAL.test(ts);
+    const r = this.num(rs), th = this.num(ts);
+    const p = { x: clean(r * Math.cos(th)), y: clean(r * Math.sin(th)) };
+    return { value: { type: 'point', p, free }, display: this.fp(p) };
+  }
+
+  evalList(list: string[]): Value {
+    if (list.length && list.every((s) => !asTuple(s) && !asPolar(s))) return { type: 'numbers', values: list.map((s) => this.num(s)) };
+    const items = list.map((s) => { const pol = asPolar(s); return pol ? this.evalPolar(pol).value : this.evalTuple(asTuple(s) ?? [s]).value; });
+    if (items.every((v) => v.type === 'point')) return { type: 'points', pts: items.map((v) => (v as { p: Vec2 }).p) };
+    if (items.every((v) => v.type === 'point3d')) return { type: 'points3d', pts: items.map((v) => (v as { p: Vec3 }).p) };
+    throw new EvalError('Lists may contain points only');
+  }
+
+  ptDisplay(p: Vec2) {
+    return this.dual((n) => `(${n(p.x)}, ${n(p.y)})`);
+  }
+
+  /** Points as "(x, y), …"; xFmt formats x exactly when the x values are known roots. */
+  ptsDisplay(pts: Vec2[], xFmt?: Fmt) {
+    if (!pts.length) return { display: 'none' };
+    const ex = (v: number) => toExact(v)?.text ?? this.f(v);
+    return {
+      display: pts.map((p) => this.fp(p)).join(', '),
+      exact: () => pts.map((p) => `(${(xFmt ?? ex)(p.x)}, ${ex(p.y)})`).join(', '),
+    };
   }
 
   // ---------- commands ----------
@@ -212,9 +306,11 @@ export class Engine {
           const F = compileFn(this.eqNode(eqs[0]), ['x', 'y'], this.scope) as Fn2;
           const G = compileFn(this.eqNode(eqs[1]), ['x', 'y'], this.scope) as Fn2;
           const sol = solveSystem(F, G, 20);
+          const sys = [this.sides(eqs[0]), this.sides(eqs[1])];
           return {
+            steps: () => systemSteps(sys, this.scope),
             value: { type: 'text', text: '', pts: sol },
-            display: sol.length ? sol.map((p) => `{x = ${this.f(p.x)}, y = ${this.f(p.y)}}`).join(', ') : 'no real solution',
+            ...(sol.length ? this.dual((m) => sol.map((p) => `{x = ${m(p.x)}, y = ${m(p.y)}}`).join(', ')) : { display: 'no real solution' }),
           };
         }
         const n = this.eqNode(eqs[0]);
@@ -222,35 +318,50 @@ export class Engine {
         const v = A.find((a) => /^[a-z]$/.test(a)) ?? (unk.includes('x') ? 'x' : unk[0] ?? 'x');
         if (unk.filter((u) => u !== v).length) throw new EvalError(`Unknown: ${unk.filter((u) => u !== v).join(', ')}`);
         const f = compileFn(n, [v], this.scope) as Fn1;
-        const r = roots(f, -100, 100);
+        // polynomials whose roots have a closed form are solved exactly; everything else numerically
+        const pr = this.polyRoots(n, v);
+        const r = pr.complete ? pr.exact!.map((e) => e.value) : roots(f, -100, 100);
+        const [lhs, rhs] = this.sides(eqs[0]);
+        const scope = this.scope;
         return {
+          steps: () => solveSteps(lhs, rhs, v, scope),
           value: { type: 'text', text: '', pts: v === 'x' ? r.map((x) => ({ x, y: 0 })) : undefined },
-          display: r.length ? r.map((x) => `${v} = ${this.f(x)}`).join(', ') : 'no real solution',
+          ...(r.length ? this.dual((m) => r.map((x) => `${v} = ${m(x)}`).join(', '), pr.fmt) : { display: 'no real solution' }),
         };
       }
       case 'Roots': {
         need(1);
-        const { f } = this.fn(A[0]);
+        const { f, node, param } = this.fn(A[0]);
         const [a, b] = A.length >= 3 ? [this.num(A[1]), this.num(A[2])] : [-100, 100];
         const pts = roots(f, a, b).map((x) => ({ x, y: 0 }));
-        return { value: { type: 'points', pts }, display: this.ptsDisplay(pts) };
+        return { value: { type: 'points', pts }, ...this.ptsDisplay(pts, this.polyRoots(node, param).fmt) };
       }
       case 'Extremum': {
         need(1);
-        const { f } = this.fn(A[0]);
+        const { f, node, param } = this.fn(A[0]);
         const [a, b] = A.length >= 3 ? [this.num(A[1]), this.num(A[2])] : [-50, 50];
-        const pts = extrema(f, a, b).map((p) => ({ x: clean(p.x), y: clean(p.y) }));
-        return { value: { type: 'points', pts }, display: this.ptsDisplay(pts) };
+        const crit = this.polyRoots(node, param, true);
+        // numeric extrema are only accurate to ~1e-8: snap them to the exact critical points when known
+        const pts = extrema(f, a, b).map((p) => {
+          const e = crit.exact?.find((c) => Math.abs(c.value - p.x) < 1e-5 * Math.max(1, Math.abs(p.x)));
+          return e ? { x: clean(e.value), y: clean(f(e.value)) } : { x: clean(p.x), y: clean(p.y) };
+        });
+        return { value: { type: 'points', pts }, ...this.ptsDisplay(pts, crit.fmt) };
       }
       case 'Intersect': {
         need(2);
         const va = this.obj(A[0]), vb = this.obj(A[1]);
         const isFn = (v: Value | undefined, s: string) => v?.type === 'function' || (!v && !splitRelation(s) && !asTuple(s));
         let pts: Vec2[] | null = null;
+        let xFmt: Fmt | undefined;
         if (va && vb) pts = intersectGeom(va, vb);
         if (!pts && isFn(va, A[0]) && isFn(vb, A[1])) {
-          const f = this.fn(A[0]).f, g = this.fn(A[1]).f;
+          const fa = this.fn(A[0]), fb = this.fn(A[1]);
+          const f = fa.f, g = fb.f;
           pts = roots((x) => f(x) - g(x), -100, 100).map((x) => ({ x, y: clean(f(x)) }));
+          if (fa.node && fb.node && fa.param === fb.param) {
+            xFmt = this.polyRoots(new math.OperatorNode('-', 'subtract', [fa.node, new math.ParenthesisNode(fb.node)]) as MathNode, fa.param).fmt;
+          }
         }
         if (!pts) {
           const ga = va ? implicitOf(va) : compileFn(this.eqNode(A[0]), ['x', 'y'], this.scope) as Fn2;
@@ -260,7 +371,7 @@ export class Engine {
           else if (ga && gb) pts = solveSystem(ga, gb, 20);
         }
         if (!pts) throw new EvalError('Cannot intersect these objects');
-        return { value: { type: 'points', pts }, display: this.ptsDisplay(pts) };
+        return { value: { type: 'points', pts }, ...this.ptsDisplay(pts, xFmt) };
       }
       case 'Derivative': {
         need(1);
@@ -271,7 +382,12 @@ export class Engine {
             let d = node;
             for (let i = 0; i < order; i++) d = math.simplify(math.derivative(d, param));
             this.nodes.set(selfName, { node: d, param });
-            return { value: { type: 'function', f: compileFn(d, [param], this.scope) as Fn1, param, tex: toTex(d) }, display: undefined, tex: `${texName(selfName)}(${param}) = ${toTex(d)}` };
+            const scope = this.scope;
+            return {
+              value: { type: 'function', f: compileFn(d, [param], this.scope) as Fn1, param, tex: toTex(d) }, display: undefined,
+              tex: `${texName(selfName)}(${param}) = ${toTex(d)}`,
+              steps: () => (order === 1 ? derivativeSteps(node, param, scope) : null),
+            };
           } catch { /* fall back to numeric */ }
         }
         let g = f;
@@ -284,7 +400,7 @@ export class Engine {
         if (A.length >= 3) {
           const a = this.num(A[1]), b = this.num(A[2]);
           const value = integrate(f, a, b);
-          return { value: { type: 'integral', f, a, b, value }, display: `= ${this.f(value)}` };
+          return { value: { type: 'integral', f, a, b, value }, ...this.dual((n) => `= ${n(value)}`) };
         }
         const F: Fn1 = (x) => integrate(f, 0, x, 200);
         return { value: { type: 'function', f: F, param, tex: '' }, display: 'numeric antiderivative, F(0) = 0' };
@@ -441,8 +557,27 @@ export class Engine {
         const unk = this.unknowns(r);
         const param = unk.find((u) => VARS.includes(u)) ?? 'x';
         this.nodes.set(selfName, { node: r, param });
-        if (!unk.length) { const value = compileFn(r, [], this.scope)(); return { value: { type: 'number', value }, display: `= ${this.f(value)}` }; }
+        if (!unk.length) { const value = compileFn(r, [], this.scope)(); return { value: { type: 'number', value }, ...this.dual((m) => `= ${m(value)}`) }; }
         return { value: { type: 'function', f: compileFn(r, [param], this.scope) as Fn1, param, tex: toTex(r) }, display: `= ${r.toString()}` };
+      }
+      case 'Factor': {
+        need(1);
+        const { f, node, param } = this.fn(A[0]);
+        const c = node && polyCoefficients(node, param, this.scope);
+        if (!c) throw new EvalError('Factor needs a polynomial with rational coefficients');
+        const fz = factorPoly(c);
+        if (node) this.nodes.set(selfName, { node, param });
+        return { value: { type: 'function', f, param, tex: factoredTex(fz, param) }, display: `= ${factoredText(fz, param)}`, steps: () => factorSteps(c, param) };
+      }
+      case 'Steps': {
+        need(1);
+        // Steps(Solve(…)), Steps(Derivative(…)), Steps(Factor(…)), or an equation / system to solve
+        const bad = new EvalError('Steps works with Solve, Derivative and Factor');
+        const inner = A.length === 1 ? asCommand(A[0]) : null;
+        if (inner && !['Solve', 'NSolve', 'Derivative', 'Factor'].includes(inner.name)) throw bad;
+        const out = inner ? this.command(inner.name, inner.args, selfName) : this.command('Solve', A, selfName);
+        if (!out.steps) throw bad;
+        return { ...out, stepsOpen: true };
       }
       case 'Tangent': {
         need(2);
@@ -453,7 +588,7 @@ export class Engine {
         const v: Value = { type: 'line', a: { x: x0, y: y0 }, b: { x: x0 + 1, y: y0 + m } };
         return { value: v, display: `y = ${this.f(m)}x ${y0 - m * x0 < 0 ? '−' : '+'} ${this.f(Math.abs(y0 - m * x0))}` };
       }
-      case 'Segment': { need(2); const a = this.pt(A[0]), b = this.pt(A[1]); return { value: { type: 'segment', a, b }, display: `= ${this.f(dist(a, b))}` }; }
+      case 'Segment': { need(2); const a = this.pt(A[0]), b = this.pt(A[1]); return { value: { type: 'segment', a, b }, ...this.dual((n) => `= ${n(dist(a, b))}`) }; }
       case 'Line': { need(2); const a = this.pt(A[0]); const bv = this.obj(A[1]); const l = bv && asLine(bv);
         const b = l ? { x: a.x + l.d.x, y: a.y + l.d.y } : this.pt(A[1]);
         return { value: { type: 'line', a, b }, display: this.lineEq(a, b) }; }
@@ -464,12 +599,12 @@ export class Engine {
           const v = this.obj(A[0]);
           if (v?.type === 'point3d') return { value: { type: 'vector3d', a: { x: 0, y: 0, z: 0 }, b: v.p } };
           const b = this.pt(A[0]);
-          return { value: { type: 'vector', a: { x: 0, y: 0 }, b }, display: this.fp(b) };
+          return { value: { type: 'vector', a: { x: 0, y: 0 }, b }, ...this.ptDisplay(b) };
         }
         const va = this.obj(A[0]), vb = this.obj(A[1]);
         if (va?.type === 'point3d' || vb?.type === 'point3d') return { value: { type: 'vector3d', a: this.pt3(A[0]), b: this.pt3(A[1]) } };
         const a = this.pt(A[0]), b = this.pt(A[1]);
-        return { value: { type: 'vector', a, b }, display: this.fp(sub(b, a)) };
+        return { value: { type: 'vector', a, b }, ...this.ptDisplay(sub(b, a)) };
       }
       case 'Circle': {
         need(2);
@@ -480,20 +615,21 @@ export class Engine {
         }
         const c = this.pt(A[0]);
         const second = this.obj(A[1]);
-        const r = second?.type === 'point' ? dist(c, second.p) : this.num(A[1]);
+        // a slider radius may pass through negative values while animating
+        const r = second?.type === 'point' ? dist(c, second.p) : Math.abs(this.num(A[1]));
         return { value: { type: 'circle', c, r }, display: this.circleEq(c, r) };
       }
       case 'Polygon': {
         need(3);
         const pts = A.map((a) => this.pt(a));
-        return { value: { type: 'polygon', pts }, display: `area = ${this.f(polygonArea(pts))}` };
+        return { value: { type: 'polygon', pts }, ...this.dual((n) => `area = ${n(polygonArea(pts))}`) };
       }
       case 'Midpoint': {
         need(1);
         let p: Vec2;
         if (A.length === 1) { const v = this.obj(A[0]); if (v?.type !== 'segment') throw new EvalError('Expected a segment'); p = mid(v.a, v.b); }
         else p = mid(this.pt(A[0]), this.pt(A[1]));
-        return { value: { type: 'point', p, free: false }, display: this.fp(p) };
+        return { value: { type: 'point', p, free: false }, ...this.ptDisplay(p) };
       }
       case 'Perpendicular': case 'Parallel': {
         need(2);
@@ -513,13 +649,16 @@ export class Engine {
         const a = this.pt(A[0]); const bv = this.obj(A[1]);
         const l = bv && asLine(bv);
         const value = l ? dist(a, projectOnLine(a, l)) : dist(a, this.pt(A[1]));
-        return { value: { type: 'number', value }, display: `= ${this.f(value)}` };
+        return { value: { type: 'number', value }, ...this.dual((n) => `= ${n(value)}`) };
       }
       case 'Angle': {
         need(3);
         const a = this.pt(A[0]), b = this.pt(A[1]), c = this.pt(A[2]);
         const value = angle(a, b, c);
-        return { value: { type: 'angle', a, b, c, value }, display: this.deg ? `= ${this.f((value * 180) / Math.PI)}°` : `= ${this.f(value)} rad` };
+        const deg = (value * 180) / Math.PI;
+        // in degrees: "= 45°"; in radians: "= 0.7854 rad", exactly "= π/4"
+        const exact = this.deg ? () => `= ${toExact(deg)?.text ?? this.f(deg)}°` : () => { const rad = toExact(value); return rad ? `= ${rad.text}` : `= ${this.f(value)} rad`; };
+        return { value: { type: 'angle', a, b, c, value }, display: this.deg ? `= ${this.f(deg)}°` : `= ${this.f(value)} rad`, exact };
       }
       case 'Area': {
         need(1);
@@ -529,7 +668,7 @@ export class Engine {
         else if (v?.type === 'circle') value = Math.PI * v.r ** 2;
         else if (A.length >= 3) value = polygonArea(A.map((a) => this.pt(a)));
         else throw new EvalError('Area needs a polygon or circle');
-        return { value: { type: 'number', value }, display: `= ${this.f(value)}` };
+        return { value: { type: 'number', value }, ...this.dual((n) => `= ${n(value)}`) };
       }
       case 'Length': {
         need(1);
@@ -539,13 +678,13 @@ export class Engine {
         else if (v?.type === 'circle') value = 2 * Math.PI * v.r;
         else if (v?.type === 'point') value = Math.hypot(v.p.x, v.p.y);
         else throw new EvalError('Length needs a segment, vector or circle');
-        return { value: { type: 'number', value }, display: `= ${this.f(value)}` };
+        return { value: { type: 'number', value }, ...this.dual((n) => `= ${n(value)}`) };
       }
       case 'Slope': {
         need(1);
         const l = lineOf(A[0]);
         const value = l.d.y / l.d.x;
-        return { value: { type: 'number', value }, display: `= ${this.f(value)}` };
+        return { value: { type: 'number', value }, ...this.dual((n) => `= ${n(value)}`) };
       }
       case 'Reflect': {
         need(2);
@@ -553,7 +692,7 @@ export class Engine {
         const l = m && asLine(m);
         const q = l ? projectOnLine(p, l) : this.pt(A[1]);
         const r = { x: 2 * q.x - p.x, y: 2 * q.y - p.y };
-        return { value: { type: 'point', p: r, free: false }, display: this.fp(r) };
+        return { value: { type: 'point', p: r, free: false }, ...this.ptDisplay(r) };
       }
       case 'Rotate': {
         need(2);
@@ -561,14 +700,14 @@ export class Engine {
         const c = A[2] ? this.pt(A[2]) : { x: 0, y: 0 };
         const dx = p.x - c.x, dy = p.y - c.y;
         const r = { x: clean(c.x + dx * Math.cos(th) - dy * Math.sin(th)), y: clean(c.y + dx * Math.sin(th) + dy * Math.cos(th)) };
-        return { value: { type: 'point', p: r, free: false }, display: this.fp(r) };
+        return { value: { type: 'point', p: r, free: false }, ...this.ptDisplay(r) };
       }
       case 'Translate': {
         need(2);
         const p = this.pt(A[0]); const v = this.obj(A[1]);
         const d = v?.type === 'vector' ? sub(v.b, v.a) : this.pt(A[1]);
         const r = { x: p.x + d.x, y: p.y + d.y };
-        return { value: { type: 'point', p: r, free: false }, display: this.fp(r) };
+        return { value: { type: 'point', p: r, free: false }, ...this.ptDisplay(r) };
       }
       case 'Curve': {
         need(5);
@@ -603,6 +742,18 @@ export class Engine {
       case 'Arrow': {
         need(2);
         return { value: { type: 'stroke', pts: [this.pt(A[0]), this.pt(A[1])], arrow: true } };
+      }
+      case 'FitLine': case 'FitPoly': case 'FitExp': case 'FitLog': case 'FitPow': case 'FitSin': {
+        need(name === 'FitPoly' ? 2 : 1);
+        const fit = FITS[name](this.ptList(A[0]), name === 'FitPoly' ? this.num(A[1]) : undefined);
+        // full precision for f' and Derivative, rounded coefficients for display
+        this.nodes.set(selfName, { node: this.node(fitExpr(fit)), param: 'x' });
+        const tex = toTex(this.node(fitExpr(fit, this.digits)));
+        return {
+          value: { type: 'function', f: fit.f, param: 'x', tex },
+          tex: `${texName(selfName)}(x) = ${tex}`,
+          display: `R² = ${r2Text(fit.r2, Math.max(4, this.digits))}`,
+        };
       }
       case 'Sphere': {
         need(2);
@@ -659,23 +810,25 @@ export class Engine {
     }
 
     const list = asList(body);
-    if (list) {
-      if (list.length && list.every((s) => !asTuple(s))) {
-        return { value: { type: 'numbers', values: list.map((s) => this.num(s)) }, tex: `${texName(name)} = ${tryTex(body)}` };
-      }
-      const items = list.map((s) => this.evalTuple(asTuple(s) ?? [s]).value);
-      if (items.every((v) => v.type === 'point')) {
-        const pts = items.map((v) => (v as { p: Vec2 }).p);
-        return { value: { type: 'points', pts }, tex: `${texName(name)} = ${tryTex(body)}` };
-      }
-      if (items.every((v) => v.type === 'point3d')) return { value: { type: 'points3d', pts: items.map((v) => (v as { p: Vec3 }).p) }, tex: `${texName(name)} = ${tryTex(body)}` };
-      throw new EvalError('Lists may contain points only');
-    }
+    if (list) return { value: this.evalList(list), tex: `${texName(name)} = ${tryTex(body)}` };
 
     const tup = asTuple(body);
     if (tup) {
       const out = this.evalTuple(tup);
       return { ...out, tex: `${texName(name)} = ${tryTex(body)}` };
+    }
+
+    const pol = asPolar(body);
+    if (pol) return { ...this.evalPolar(pol), tex: `${texName(name)} = ${tryTex(body)}` };
+
+    const polar = asPolarCurve(body);
+    if (polar) {
+      const n = this.node(polar);
+      const bad = this.unknowns(n).filter((s) => s !== 'theta');
+      if (bad.length) throw new UndefinedSymbolError(bad[0]);
+      const r = compileFn(n, ['theta'], this.scope) as Fn1;
+      const t1 = polarRange(r);
+      return { value: { type: 'curve', ...polarXY(r), t0: 0, t1 }, tex: `r = ${toTex(n)}`, display: `0 ≤ θ ≤ ${piText(t1)}` };
     }
 
     const rel = splitRelation(body);
@@ -713,7 +866,7 @@ export class Engine {
       return {
         value: { type: 'number', value, slider: isSlider },
         tex: `${texName(name)} = ${toTex(n)}`,
-        display: isSlider || NUM_LITERAL.test(body) ? undefined : `= ${this.f(value)}`,
+        ...(isSlider || NUM_LITERAL.test(body) ? {} : this.dual((m) => `= ${m(value)}`)),
       };
     }
     if (unk.includes('z')) throw new EvalError('Use an equation, e.g. z = …');
@@ -727,6 +880,23 @@ export class Engine {
     this.nodes.set(name, { node: n, param });
     return { value: { type: 'function', f: compileFn(n, [param], this.scope) as Fn1, param, tex: toTex(n) }, tex: `${texName(name)}(${param}) = ${toTex(n)}` };
   }
+}
+
+/** Adds `exact`, computed on first read and left undefined when it says the same as `display`. */
+function withExact(r: Resolved, make: () => string) {
+  let cached: string | undefined | null = null;
+  Object.defineProperty(r, 'exact', {
+    enumerable: true,
+    get: () => {
+      if (cached === null) { const e = make(); cached = e === r.display ? undefined : e; }
+      return cached;
+    },
+  });
+}
+
+/** Steps are an extra: a bug in them must never break the row. */
+function safeSteps(make: () => Step[] | null): Step[] | null {
+  try { return make(); } catch { return null; }
 }
 
 /** Evaluate all objects, resolving dependencies regardless of order. */
@@ -757,7 +927,11 @@ function run(objs: MObj[], digits: number, sheet: Record<string, string> = {}, o
       try {
         const out = eng.evalObject(o);
         eng.register(nameOf(o), out.value);
-        res.set(o.id, { obj: o, value: out.value, display: out.display, tex: out.tex ?? tryTex(o.input) });
+        const r: Resolved = { obj: o, value: out.value, display: out.display, tex: out.tex ?? tryTex(o.input) };
+        if (out.exact) withExact(r, out.exact);
+        if (out.steps) { const make = out.steps; let cached: Step[] | null | undefined; r.steps = () => (cached === undefined ? (cached = safeSteps(make)) : cached); }
+        if (out.stepsOpen) r.stepsOpen = true;
+        res.set(o.id, r);
       } catch (e) {
         if (e instanceof UndefinedSymbolError && names.has(e.symbol) && !eng.values.has(e.symbol) && e.symbol !== nameOf(o)) {
           next.push(o);

@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { beginLive, EXTRA_COLORS, freeName, labelDefault, PALETTE, useStore } from '../store/project';
+import { ANIM_MODES, SPEEDS } from '../store/animate';
 import { useResolved } from '../store/resolved';
 import { evaluateAll, missingSymbols } from '../math/engine';
 import { splitDefinition } from '../math/parser';
 import { is3DOnly, type Resolved } from '../math/types';
+import { formatNote } from '../math/steps';
 import { useT } from '../i18n/i18n';
 import { Icon } from './Icons';
 import { MathField } from './MathField';
@@ -13,11 +15,28 @@ import { RichText } from './RichText';
 import { roundAt, textInput } from '../math/annotate';
 import { Viewport } from '../graph2d/viewport';
 
-function Tex({ tex }: { tex: string }) {
+function Tex({ tex, className = 'alg-tex' }: { tex: string; className?: string }) {
   const html = useMemo(() => {
     try { return katex.renderToString(tex, { throwOnError: false, strict: false }); } catch { return tex; }
   }, [tex]);
-  return <div className="alg-tex" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+function StepsList({ r }: { r: Resolved }) {
+  const t = useT();
+  const lang = useStore((s) => s.settings.lang);
+  const steps = useMemo(() => r.steps?.() ?? null, [r]);
+  if (!steps?.length) return <div className="alg-note">{t('steps.none')}</div>;
+  return (
+    <ol className="steps-list" onClick={(e) => e.stopPropagation()}>
+      {steps.map((s, i) => (
+        <li key={i}>
+          <Tex tex={s.tex} className="step-tex" />
+          <div className="step-note">{formatNote(s, t, lang === 'ar' ? '، ' : ', ')}</div>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 const EXAMPLES = ['f(x) = sin(x)', 'y = x^2 - 3', 'x^2 + y^2 = 9', 'a x^2 + b', 'Solve(x^2 - 2x = 3)', 'A = (1, 2)'];
@@ -28,34 +47,17 @@ function SliderRow({ r }: { r: Resolved }) {
   const { obj } = r;
   const s = obj.slider!;
   const value = r.value?.type === 'number' ? r.value.value : 0;
-  const [playing, setPlaying] = useState(false);
-  const dir = useRef(1);
+  const playing = useStore((st) => st.playing.includes(obj.id));
   const name = splitDefinition(obj.input).name ?? obj.name;
   const set = (v: number) => useStore.getState().liveUpdate(obj.id, { input: `${name} = ${+v.toFixed(6)}` });
-
-  useEffect(() => {
-    if (!playing) return;
-    beginLive();
-    let raf = 0;
-    let cur = value;
-    const tick = () => {
-      const span = s.max - s.min;
-      cur += dir.current * span / 240;
-      if (cur >= s.max) { cur = s.max; dir.current = -1; }
-      if (cur <= s.min) { cur = s.min; dir.current = 1; }
-      set(Math.round(cur / s.step) * s.step);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); useStore.getState().commit(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing]);
+  const speed = s.speed ?? 1;
 
   return (
     <div className="slider-row" onClick={(e) => e.stopPropagation()} style={{ ['--c' as string]: obj.color }}>
-      <button className="play-btn" onClick={() => setPlaying(!playing)} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}>
+      <button className="play-btn" onClick={() => useStore.getState().togglePlay(obj.id)} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}>
         {playing ? <Icon.pause /> : <Icon.play />}
       </button>
+      {speed !== 1 && <span className="speed-chip">×{speed}</span>}
       <span className="lim">{s.min}</span>
       <input
         type="range" min={s.min} max={s.max} step={s.step} value={value}
@@ -87,11 +89,20 @@ function ItemMenu({ r, onClose }: { r: Resolved; onClose(): void }) {
   const st = useStore.getState();
   const { obj } = r;
   const ref = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
-    const h = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) onClose(); };
-    setTimeout(() => document.addEventListener('pointerdown', h));
-    return () => document.removeEventListener('pointerdown', h);
-  }, [onClose]);
+    // fit the menu in the visible part of the list (above the on-screen keyboard) and bring it into view
+    const el = ref.current, list = el?.closest('.panel-scroll');
+    if (el && list) {
+      el.style.maxHeight = `${Math.max(160, list.clientHeight - 16)}px`;
+      el.scrollIntoView({ block: 'nearest' });
+    }
+    // subscribe once: the item re-renders on every animation frame, and a listener added after cleanup would leak
+    const h = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) close.current(); };
+    const timer = setTimeout(() => document.addEventListener('pointerdown', h));
+    return () => { clearTimeout(timer); document.removeEventListener('pointerdown', h); };
+  }, []);
   const [range, setRange] = useState(obj.slider ?? { min: -5, max: 5, step: 0.1 });
   const labelled = obj.showLabel ?? labelDefault(st.settings, st.mode, r.value?.type === 'point' || r.value?.type === 'point3d');
   return (
@@ -108,10 +119,32 @@ function ItemMenu({ r, onClose }: { r: Resolved; onClose(): void }) {
             <label key={k}>{t(k)}
               <input type="number" value={range[k]} step="any"
                 onChange={(e) => setRange({ ...range, [k]: +e.target.value })}
-                onBlur={() => range.max > range.min && range.step > 0 && st.patchObject(obj.id, { slider: range })} />
+                onBlur={() => range.max > range.min && range.step > 0 && st.patchObject(obj.id, { slider: { ...obj.slider, min: range.min, max: range.max, step: range.step } })} />
             </label>
           ))}
+          <label>{t('speed')}
+            <select value={obj.slider.speed ?? 1} aria-label={t('speed')}
+              onChange={(e) => st.patchObject(obj.id, { slider: { ...obj.slider!, speed: +e.target.value } })}>
+              {SPEEDS.map((v) => <option key={v} value={v}>×{v}</option>)}
+            </select>
+          </label>
+          <label className="wide">{t('animMode')}
+            <select value={obj.slider.mode ?? 'oscillate'} aria-label={t('animMode')}
+              onChange={(e) => st.patchObject(obj.id, { slider: { ...obj.slider!, mode: e.target.value as typeof ANIM_MODES[number] } })}>
+              {ANIM_MODES.map((m) => <option key={m} value={m}>{t(`anim.${m}`)}</option>)}
+            </select>
+          </label>
         </div>
+      )}
+      {(r.value?.type === 'point' || r.value?.type === 'point3d') && (
+        <>
+          <hr />
+          <button onClick={() => {
+            if (obj.trace) st.clearTrace(obj.id);
+            st.patchObject(obj.id, { trace: !obj.trace });
+          }}><Icon.trace />{t('trace')}{obj.trace ? ' ✓' : ''}</button>
+          <button onClick={() => { st.clearTrace(obj.id); onClose(); }}><Icon.eraser />{t('clearTrace')}</button>
+        </>
       )}
       <hr />
       {r.value?.type === 'label' && st.mode !== '3d' && (
@@ -139,11 +172,14 @@ function AlgebraItem({ r }: { r: Resolved }) {
   const selected = useStore((s) => s.selectedId === obj.id);
   const editing = useStore((s) => s.editingId === obj.id);
   const mode = useStore((s) => s.mode);
+  const exactDefault = useStore((s) => s.settings.exact);
   const [draft, setDraft] = useState(obj.input);
   const [menu, setMenu] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(!!r.stepsOpen);
   const st = useStore.getState;
 
   useEffect(() => { if (editing) setDraft(obj.input); }, [editing, obj.input]);
+  useEffect(() => { if (r.stepsOpen) setStepsOpen(true); }, [r.stepsOpen]);
 
   const submit = (v: string) => {
     if (v.trim() && v.trim() !== obj.input) st().updateInput(obj.id, v);
@@ -153,6 +189,8 @@ function AlgebraItem({ r }: { r: Resolved }) {
 
   const isSlider = r.value?.type === 'number' && r.value.slider && obj.slider;
   const only3d = mode !== '3d' && is3DOnly(r.value);
+  const exact = r.exact;
+  const approx = obj.approx ?? !exactDefault;
 
   return (
     <div className={`alg-item ${selected ? 'selected' : ''}`} onClick={() => { st().select(obj.id); st().setEditing(obj.id); }}>
@@ -174,7 +212,23 @@ function AlgebraItem({ r }: { r: Resolved }) {
         ) : (
           <Tex tex={r.tex} />
         )}
-        {r.display && !editing && <div className="alg-value"><span>{r.display}</span></div>}
+        {r.display && !editing && (
+          <div className="alg-value">
+            <span>{exact && !approx ? exact : r.display}</span>
+            {exact && (
+              <button className={`approx-btn ${approx ? 'on' : ''}`} aria-pressed={approx} aria-label={approx ? t('showExact') : t('showDecimal')}
+                title={approx ? t('showExact') : t('showDecimal')}
+                onClick={(e) => { e.stopPropagation(); st().liveUpdate(obj.id, { approx: !approx }); }}>≈</button>
+            )}
+          </div>
+        )}
+        {r.steps && !editing && (
+          <button className={`steps-btn ${stepsOpen ? 'on' : ''}`} aria-expanded={stepsOpen}
+            onClick={(e) => { e.stopPropagation(); setStepsOpen(!stepsOpen); }}>
+            {stepsOpen ? t('steps.hide') : t('steps.show')}
+          </button>
+        )}
+        {r.steps && stepsOpen && !editing && <StepsList r={r} />}
         {r.error && <div className="alg-error">{r.error}</div>}
         {only3d && <div className="alg-note">◇ {t('onlyIn3d')}</div>}
         {isSlider && !editing && <SliderRow r={r} />}
@@ -191,6 +245,8 @@ export function AlgebraPanel() {
   const t = useT();
   const items = useResolved();
   const mode = useStore((s) => s.mode);
+  const anyPlaying = useStore((s) => s.playing.length > 0);
+  const hasSliders = items.some((r) => r.obj.slider);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -213,6 +269,12 @@ export function AlgebraPanel() {
 
   return (
     <div className="panel-scroll">
+      {hasSliders && (
+        <div className="anim-bar">
+          <button className="ghost-btn" onClick={() => useStore.getState().playAll()}><Icon.play />{t('playAll')}</button>
+          <button className="ghost-btn" disabled={!anyPlaying} onClick={() => useStore.getState().stopAll()}><Icon.stop />{t('stopAll')}</button>
+        </div>
+      )}
       {items.map((r) => <AlgebraItem key={r.obj.id} r={r} />)}
       <div className="alg-input-row" ref={endRef}>
         <div className="alg-gutter"><Icon.plus /></div>

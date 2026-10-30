@@ -38,6 +38,7 @@ function layout(tab: string, is3d: boolean): Key[][] {
       cmd('Solve'), cmd('Roots'), cmd('Intersect'),
       cmd('Derivative'), cmd('Integral'), cmd('Extremum'),
       cmd('Tangent'), cmd('Curve'), cmd('Simplify'),
+      cmd('Factor'), cmd('Expand'), cmd('Angle'),
       cmd('Segment'), cmd('Circle'), cmd('Polygon'),
     ], CTRL];
     case 'abc': {

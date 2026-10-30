@@ -62,7 +62,7 @@ const ARG = {
 } satisfies Record<string, L>;
 
 export type ArgKey = keyof typeof ARG;
-export type HelpGroup = 'commands' | 'calculus' | 'geometry' | 'stats' | '3d' | 'annotate';
+export type HelpGroup = 'commands' | 'calculus' | 'fit' | 'geometry' | 'stats' | '3d' | 'annotate';
 
 export interface CommandDef {
   name: string;
@@ -80,13 +80,30 @@ const ex = (code: string, en: string, ar: string) => ({ code, en, ar });
 export const COMMAND_TABLE: CommandDef[] = [
   // ---- algebra ----
   { name: 'Solve', cat: 'text', group: 'commands', sigs: [['equation'], ['equation', 'variable'], ['equation', 'equation2']], examples: [
-    ex('Solve(x^2 - 2x = 3)', 'solve equation', 'حل معادلة'), ex('Solve(x + y = 3, x - y = 1)', 'solve system', 'حل نظام معادلات')] },
+    ex('Solve(x^2 - 2x = 3)', 'solve equation', 'حل معادلة'), ex('Solve(x + y = 3, x - y = 1)', 'solve system', 'حل نظام معادلات'),
+    ex('Solve(2x^2 - 3x - 1 = 0)', 'exact roots (≈ for decimals)', 'جذور دقيقة (≈ للقيم العشرية)')] },
   { name: 'NSolve', cat: 'text', group: 'commands', sigs: [['equation'], ['equation', 'variable']], examples: [] },
   { name: 'Roots', cat: 'list', group: 'commands', sigs: [['function'], ['function', 'from', 'to']], examples: [ex('Roots(f)', 'zeros', 'الأصفار')] },
   { name: 'Extremum', cat: 'list', group: 'commands', sigs: [['function'], ['function', 'from', 'to']], examples: [ex('Extremum(f)', 'max / min', 'القيم العظمى والصغرى')] },
   { name: 'Intersect', cat: 'list', group: 'commands', sigs: [['object', 'object2']], examples: [ex('Intersect(f, g)', 'intersection points', 'نقاط التقاطع')] },
   { name: 'Simplify', cat: 'function', group: 'commands', sigs: [['expression']], examples: [ex('Simplify(x(x+1) - x)', 'simplify', 'تبسيط')] },
   { name: 'Expand', cat: 'function', group: 'commands', sigs: [['expression']], examples: [ex('Expand((x+1)^3)', 'expand', 'فك الأقواس')] },
+  { name: 'Factor', cat: 'function', group: 'commands', sigs: [['expression']], examples: [
+    ex('Factor(x^3 - 6x^2 + 11x - 6)', 'factor a polynomial', 'تحليل كثيرة حدود'),
+    ex('Factor(2x^2 - 8)', 'common factor & difference of squares', 'عامل مشترك وفرق بين مربعين')] },
+  { name: 'Steps', cat: 'text', group: 'commands', sigs: [['equation'], ['equation', 'equation2'], ['expression']], examples: [
+    ex('Steps(3(x - 2) = x + 4)', 'step-by-step solution', 'حل خطوة بخطوة'),
+    ex('Steps(Derivative(sin(x^2)))', 'derivative with named rules', 'مشتقة مع ذكر القواعد'),
+    ex('Steps(Factor(x^3 - 6x^2 + 11x - 6))', 'factoring steps', 'خطوات التحليل'),
+    ex('Steps(x + y = 3, x - y = 1)', 'system by elimination', 'نظام بالحذف')] },
+
+  // ---- regression ----
+  { name: 'FitLine', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitLine({(0,1), (1,3), (2,4), (3,7)})', 'regression line, R²', 'خط الانحدار، R²')] },
+  { name: 'FitPoly', cat: 'function', group: 'fit', sigs: [['points', 'degree']], examples: [ex('FitPoly({(0,1), (1,0), (2,3), (3,10)}, 2)', 'polynomial of degree n', 'كثيرة حدود من الدرجة n')] },
+  { name: 'FitExp', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitExp({(0,2), (1,3.3), (2,5.4), (3,9)})', 'a·e^(bx)', 'a·e^(bx)')] },
+  { name: 'FitLog', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitLog({(1,1), (2,2.4), (4,3.8), (8,5.1)})', 'a + b·ln x', 'a + b·ln x')] },
+  { name: 'FitPow', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitPow({(1,2), (2,5.6), (3,10.4), (4,16)})', 'a·x^b', 'a·x^b')] },
+  { name: 'FitSin', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitSin({(0,0), (1,0.84), (2,0.91), (3,0.14), (4,-0.76), (5,-0.96)})', 'a·sin(bx + c) + d', 'a·sin(bx + c) + d')] },
 
   // ---- calculus ----
   { name: 'Derivative', cat: 'function', group: 'calculus', sigs: [['function'], ['function', 'order']], examples: [ex('Derivative(f)', 'symbolic derivative', 'المشتقة الرمزية')] },

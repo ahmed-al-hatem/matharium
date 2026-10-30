@@ -98,6 +98,11 @@ describe('settings in project files', () => {
     expect('lang' in out.settings).toBe(false);
     st.setSettings({ lang: 'en' });
   });
+  it('turns the old polar grid checkbox into the polar grid type', () => {
+    expect(migrateSettings({ grid: true, polarGrid: true })).toMatchObject({ gridType: 'polar' });
+    expect(migrateSettings({ grid: true, polarGrid: false })).toMatchObject({ gridType: 'majorMinor' });
+    expect('polarGrid' in migrateSettings({ polarGrid: true })).toBe(false);
+  });
   it('opens a version 2 file with the default grid type and projection', () => {
     const st = useStore.getState();
     const v2 = {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
-import type { Fn1, Fn2, Fn3, Resolved, Vec2 } from '../math/types';
+import type { Fn1, Fn2, Fn3, Resolved, Vec2, Vec3 } from '../math/types';
 import { march } from '../graph2d/march';
 
 export function clipPlanes(R: number) {
@@ -133,6 +133,12 @@ export function lines(segs: [Vec2, Vec2][], color: string, planes: THREE.Plane[]
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, clippingPlanes: planes }));
+}
+
+/** Positions left behind by a traced point. */
+export function traceLine(pts: Vec3[], color: string, planes: THREE.Plane[]) {
+  const g = new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, p.y, p.z)));
+  return new THREE.Line(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6, clippingPlanes: planes }));
 }
 
 export function pointMesh(x: number, y: number, z: number, color: string, R: number) {

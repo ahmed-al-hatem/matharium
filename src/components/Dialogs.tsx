@@ -65,7 +65,7 @@ export function SettingsDialog({ tab }: { tab: SettingsTab }) {
   );
 }
 
-function Check({ k, label }: { k: 'grid' | 'axes' | 'snap' | 'axes3d' | 'plane3d' | 'grid3d'; label: string }) {
+function Check({ k, label }: { k: 'grid' | 'axes' | 'snap' | 'axes3d' | 'plane3d' | 'grid3d' | 'exact'; label: string }) {
   const t = useT();
   const v = useStore((x) => x.settings[k]);
   return <label className="check"><input type="checkbox" checked={v} onChange={(e) => useStore.getState().setSettings({ [k]: e.target.checked })} />{t(label)}</label>;
@@ -79,9 +79,9 @@ function GeneralTab() {
   const t = useT();
   const s = useStore((x) => x.settings);
   const set = useStore.getState().setSettings;
-  // TODO(A1): "exact or decimal results by default" goes here once session A1 is merged
   return (
     <>
+      <Check k="exact" label="exact" />
       <Field label={t('language')}>
         <select className="field" value={s.lang} onChange={(e) => set({ lang: e.target.value as 'en' | 'ar' })}>
           <option value="en">English</option><option value="ar">العربية</option>
@@ -201,6 +201,10 @@ const EXTRA: Partial<Record<string, { code: string; en: string; ar: string }[]>>
     row("f'(x)", 'derivative of f', 'مشتقة f'), row('g(x) = x < 0 ? -x : x^2', 'piecewise', 'دالة متعددة التعريف'),
     row('{(1,2), (3,5), (4,1)}', 'list of points', 'قائمة نقاط'), row('l = {2, 4, 4, 5, 7}', 'list of numbers', 'قائمة أعداد'),
   ],
+  'help.polar': [
+    row('r = 2 sin(3θ)', 'polar curve (rose)', 'منحنى قطبي (وردة)'), row('r = θ', 'spiral, θ up to 6π', 'حلزون، θ حتى 6π'),
+    row('r = 1 + cos(θ)', 'cardioid', 'منحنى قلبي'), row('(3; 45°)', 'polar point (r; θ)', 'نقطة قطبية (r; θ)'), row('(2; π/3)', 'angle in radians', 'زاوية بالراديان'),
+  ],
   'help.geometry': [row('A = (1, 2)', 'free point (drag it)', 'نقطة حرة (اسحبها)')],
   'help.3d': [row('z = x^2 - y^2', 'surface', 'سطح'), row('x^2 + y^2 + z^2 = 4', 'implicit surface', 'سطح ضمني'), row('(1, 2, 3)', '3D point', 'نقطة ثلاثية الأبعاد')],
   'help.keys': [
@@ -211,7 +215,7 @@ const EXTRA: Partial<Record<string, { code: string; en: string; ar: string }[]>>
 };
 
 const GROUPS: { key: string; table?: HelpGroup }[] = [
-  { key: 'help.functions' }, { key: 'help.commands', table: 'commands' }, { key: 'help.calculus', table: 'calculus' },
+  { key: 'help.functions' }, { key: 'help.polar' }, { key: 'help.commands', table: 'commands' }, { key: 'help.fit', table: 'fit' }, { key: 'help.calculus', table: 'calculus' },
   { key: 'help.geometry', table: 'geometry' }, { key: 'help.stats', table: 'stats' }, { key: 'help.3d', table: '3d' }, { key: 'help.annotate', table: 'annotate' }, { key: 'help.keys' },
 ];
 
