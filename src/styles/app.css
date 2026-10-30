@@ -283,10 +283,14 @@ table.sheet td input { width: 100%; background: transparent; border: 0; outline:
 .kb-tabs button { padding: 6px 14px; border-radius: 999px; font-size: 18px; color: var(--text-equation); font-family: var(--font-ui-en); }
 .kb-tabs button.on { background: var(--accent-blue); color: #fff; }
 .kb-close { position: absolute; top: 10px; right: 16px; }
-.kb-body { display: flex; gap: 22px; justify-content: center; }
-.kb-grid { display: grid; gap: 6px; grid-template-columns: repeat(var(--cols), minmax(42px, 82px)); }
+.kb-body { display: flex; flex-wrap: wrap; gap: 6px 22px; justify-content: center; align-items: stretch; width: fit-content; margin-inline: auto; }
+/* a space bar row under the other blocks, as wide as they are together */
+.kb-grid.full { flex-basis: 100%; grid-template-columns: 1fr; }
+.kb-grid { display: grid; gap: 6px; grid-template-columns: repeat(var(--cols), minmax(42px, 82px)); grid-auto-rows: minmax(48px, 1fr); }
+/* ABC: half-key columns so rows can be offset and shift/backspace are 1.5 keys wide */
+.kb-grid.half { grid-template-columns: repeat(var(--cols), minmax(18px, 34px)); }
 .key {
-  height: 48px; border-radius: 8px; background: var(--bg-raised); color: var(--text-highlight); font-family: var(--font-math); font-size: 21px;
+  min-height: 48px; border-radius: 8px; background: var(--bg-raised); color: var(--text-highlight); font-family: var(--font-math); font-size: 21px;
   display: grid; place-items: center; user-select: none; touch-action: manipulation; border-bottom: 1px solid rgba(255,255,255,.04);
 }
 .key:hover { background: #222322; }
@@ -297,6 +301,9 @@ table.sheet td input { width: 100%; background: transparent; border: 0; outline:
 .key.ctrl { background: #262726; font-family: var(--font-ui-en); font-size: 17px; }
 .key.enter { background: var(--accent-blue); color: #fff; }
 .key.wide { grid-column: span 2; }
+.key.space { color: var(--text-muted-axes); font-size: 20px; }
+.key.shift.on { background: var(--text-highlight); color: #000; }
+.key.shift.lock { box-shadow: inset 0 -3px 0 var(--accent-blue); }
 .key small { font-size: 12px; }
 
 /* ---------- dialogs ---------- */
@@ -422,9 +429,10 @@ select.field { font-family: inherit; font-size: 13px; }
   .stage { flex: 1; min-height: 34vh; }
   .view-ctrls { gap: 8px; bottom: 12px; }
   .fab { width: 38px; height: 38px; }
-  .key { height: 38px; font-size: 17px; }
-  .kb-body { gap: 8px; }
-  .kb-grid { grid-template-columns: repeat(var(--cols), minmax(28px, 1fr)); flex: 1; gap: 4px; }
+  .key { min-height: 38px; font-size: 17px; }
+  .kb-body { gap: 4px 8px; width: auto; }
+  .kb-grid { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-auto-rows: minmax(38px, auto); flex: 1; gap: 4px; }
+  .kb-grid.half { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); width: 100%; max-width: 640px; margin-inline: auto; }
   .kb-tabs { margin-bottom: 6px; }
   .kb-tabs button { font-size: 15px; padding: 5px 10px; }
   .keyboard { padding: 8px 8px 10px; }
@@ -435,7 +443,8 @@ select.field { font-family: inherit; font-size: 13px; }
   .ws-root { padding: 0 8px 24px; }
   .worksheet { padding: 22px 16px; }
   .kb-body { flex-direction: column; gap: 4px; }
-  .key { height: 34px; }
+  .key { min-height: 34px; }
+  .kb-grid { grid-auto-rows: minmax(34px, auto); }
   .form-row { grid-template-columns: 80px 1fr 1fr; }
   .settings-row { grid-template-columns: 1fr; gap: 4px; }
 }
