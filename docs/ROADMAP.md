@@ -226,4 +226,4 @@ claude "Implement session D from docs/ROADMAP.md"
 | أ2 | ⏳ لم تبدأ | — |
 | ب | ⏳ لم تبدأ | — |
 | ج | ⏳ لم تبدأ | — |
-| د | ✅ منجزة، بانتظار المراجعة والدمج | [#5](https://github.com/ahmed-al-hatem/matharium/pull/5) |
+| د | ✅ مدموجة | [#5](https://github.com/ahmed-al-hatem/matharium/pull/5) |
