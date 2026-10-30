@@ -37,14 +37,14 @@ export function SettingsDialog() {
     st.setView({ ox: (rng.xmin + rng.xmax) / 2, oy: (rng.ymin + rng.ymax) / 2, sx: W / (rng.xmax - rng.xmin), sy: H / (rng.ymax - rng.ymin) });
   };
 
-  const check = (key: 'grid' | 'axes' | 'labels' | 'snap') => (
-    <label className="check"><input type="checkbox" checked={s[key]} onChange={(e) => st.setSettings({ [key]: e.target.checked })} />{t(key)}</label>
+  const check = (key: 'grid' | 'axes' | 'labels' | 'snap' | 'polarGrid') => (
+    <label className="check"><input type="checkbox" checked={!!s[key]} onChange={(e) => st.setSettings({ [key]: e.target.checked })} />{t(key)}</label>
   );
 
   return (
     <Modal title={t('settings')} onClose={close}>
       <h3>{t('view')}</h3>
-      {check('grid')}{check('axes')}{check('labels')}{mode !== '3d' && check('snap')}
+      {check('grid')}{check('polarGrid')}{check('axes')}{check('labels')}{mode !== '3d' && check('snap')}
       {mode !== '3d' ? (
         <>
           <div className="form-row"><span>{t('xRange')}</span>
@@ -81,6 +81,15 @@ const HELP: { key: string; rows: [string, string][] }[] = [
     ['f(x) = x^3 - 3x', 'function'], ['y = 2x + 1', 'explicit line'], ['x^2 + y^2 = 9', 'implicit curve'],
     ['y < sin(x)', 'inequality region'], ['a x^2 + b', 'auto-creates sliders a, b'], ["f'(x)", 'derivative of f'],
     ['g(x) = x < 0 ? -x : x^2', 'piecewise'], ['{(1,2), (3,5), (4,1)}', 'list of points'],
+  ] },
+  { key: 'help.polar', rows: [
+    ['r = 2 sin(3θ)', 'polar curve (rose)'], ['r = θ', 'spiral, θ up to 6π'], ['r = 1 + cos(θ)', 'cardioid'],
+    ['(3; 45°)', 'polar point (r; θ)'], ['(2; π/3)', 'angle in radians'],
+  ] },
+  { key: 'help.fit', rows: [
+    ['FitLine({(0,1), (1,3), (2,4), (3,7)})', 'regression line, R²'], ['FitPoly({(0,1), (1,0), (2,3), (3,10)}, 2)', 'polynomial of degree n'],
+    ['FitExp({(0,2), (1,3.3), (2,5.4), (3,9)})', 'a·e^(bx)'], ['FitLog({(1,1), (2,2.4), (4,3.8), (8,5.1)})', 'a + b·ln x'],
+    ['FitPow({(1,2), (2,5.6), (3,10.4), (4,16)})', 'a·x^b'], ['FitSin({(0,0), (1,0.84), (2,0.91), (3,0.14), (4,-0.76), (5,-0.96)})', 'a·sin(bx + c) + d'],
   ] },
   { key: 'help.commands', rows: [
     ['Solve(x^2 - 2x = 3)', 'solve equation'], ['Solve(x + y = 3, x - y = 1)', 'solve system'],

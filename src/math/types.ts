@@ -15,8 +15,13 @@ export interface MObj {
   visible: boolean;
   showLabel?: boolean;
   lineWidth?: number;
-  slider?: { min: number; max: number; step: number };
+  slider?: { min: number; max: number; step: number; speed?: number; mode?: AnimMode };
+  /** leave a trace of the point's positions while it moves */
+  trace?: boolean;
 }
+
+/** How an animated slider moves: back and forth, increasing and wrapping around, or once up to max. */
+export type AnimMode = 'oscillate' | 'increase' | 'once';
 
 export type Value =
   | { type: 'function'; f: Fn1; param: string; tex: string; node?: unknown; ineq?: RelOp }

@@ -39,6 +39,12 @@ const en: Record<string, string> = {
   'group.basic': 'Basic', 'group.lines': 'Lines', 'group.construct': 'Construct', 'group.measure': 'Measure', 'group.edit': 'Edit',
   'help.title': 'Quick reference', 'help.functions': 'Functions & equations', 'help.commands': 'Commands', 'help.geometry': 'Geometry',
   'help.3d': '3D', 'help.keys': 'Shortcuts',
+  speed: 'Speed', animMode: 'Animation', 'anim.oscillate': 'Back and forth', 'anim.increase': 'Increasing, repeat', 'anim.once': 'Once',
+  playAll: 'Play all', stopAll: 'Stop all', trace: 'Trace', clearTrace: 'Clear trace',
+  recordVideo: 'Record video (WebM)', stopRecording: 'Stop', recorded: 'Video saved', recordUnsupported: 'This browser cannot record video',
+  polarGrid: 'Polar grid', 'help.polar': 'Polar coordinates', 'help.fit': 'Regression',
+  'fit.FitLine': 'Linear', 'fit.FitPoly2': 'Quadratic', 'fit.FitPoly3': 'Cubic', 'fit.FitExp': 'Exponential', 'fit.FitLog': 'Logarithmic',
+  'fit.FitPow': 'Power', 'fit.FitSin': 'Sine', 'sheet.fitNeed': 'Put at least two points in columns A and B',
   untitled: 'Untitled', empty: 'Type a function, equation, point or command',
 };
 
@@ -80,6 +86,12 @@ const ar: Record<string, string> = {
   'group.basic': 'أساسي', 'group.lines': 'المستقيمات', 'group.construct': 'إنشاء', 'group.measure': 'قياس', 'group.edit': 'تحرير',
   'help.title': 'مرجع سريع', 'help.functions': 'الدوال والمعادلات', 'help.commands': 'الأوامر', 'help.geometry': 'الهندسة',
   'help.3d': 'ثلاثي الأبعاد', 'help.keys': 'الاختصارات',
+  speed: 'السرعة', animMode: 'التحريك', 'anim.oscillate': 'ذهاب وإياب', 'anim.increase': 'تزايد مع تكرار', 'anim.once': 'مرة واحدة',
+  playAll: 'تشغيل الكل', stopAll: 'إيقاف الكل', trace: 'ترك أثر', clearTrace: 'مسح الأثر',
+  recordVideo: 'تسجيل فيديو (WebM)', stopRecording: 'إيقاف', recorded: 'تم حفظ الفيديو', recordUnsupported: 'هذا المتصفح لا يدعم تسجيل الفيديو',
+  polarGrid: 'شبكة قطبية', 'help.polar': 'الإحداثيات القطبية', 'help.fit': 'الانحدار',
+  'fit.FitLine': 'خطي', 'fit.FitPoly2': 'تربيعي', 'fit.FitPoly3': 'تكعيبي', 'fit.FitExp': 'أسي', 'fit.FitLog': 'لوغاريتمي',
+  'fit.FitPow': 'قوة', 'fit.FitSin': 'جيبي', 'sheet.fitNeed': 'ضع نقطتين على الأقل في العمودين A وB',
   untitled: 'بدون عنوان', empty: 'اكتب دالة أو معادلة أو نقطة أو أمرًا',
 };
 

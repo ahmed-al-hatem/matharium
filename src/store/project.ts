@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { categorize, splitDefinition } from '../math/parser';
 import { missingSymbols } from '../math/engine';
-import type { MObj } from '../math/types';
+import type { MObj, Vec3 } from '../math/types';
 
 export const PALETTE = ['#E45B45', '#6DC4AA', '#E1B549', '#3282F6'];
 export const EXTRA_COLORS = ['#DCDCDC', '#B07CE8', '#E87CB0', '#8FCB5A'];
@@ -16,6 +16,8 @@ export type ToolId =
 export interface View { ox: number; oy: number; sx: number; sy: number }
 export interface Settings {
   grid: boolean; axes: boolean; labels: boolean; snap: boolean; digits: number; range3d: number; lang: 'en' | 'ar';
+  /** circles and rays instead of the square grid */
+  polarGrid?: boolean;
 }
 
 interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
@@ -38,7 +40,7 @@ export const DEFAULT_VIEW: View = { ox: 0, oy: 0, sx: 50, sy: 50 };
 const DEFAULT_TABLE: TableCfg = { ids: [], start: -5, end: 5, step: 1 };
 
 interface ParkedWorkspace extends Workspace { past: Snapshot[]; future: Snapshot[] }
-const DEFAULT_SETTINGS: Settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' };
+const DEFAULT_SETTINGS: Settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en', polarGrid: false };
 
 interface State {
   mode: Mode;
@@ -61,6 +63,12 @@ interface State {
   toast: string | null;
   pwa: PwaState;
   workspaces: Partial<Record<Mode, ParkedWorkspace>>;
+  /** ids of the sliders that are animating */
+  playing: string[];
+  /** positions left behind by points with `trace` on (not saved, not part of undo) */
+  traces: Record<string, Vec3[]>;
+  /** start time (ms) of the video recording in progress */
+  recording: number | null;
 
   setMode(m: Mode): void;
   setPanel(p: Panel | null): void;
@@ -82,6 +90,15 @@ interface State {
   updateInput(id: string, input: string): void;
   /** Change without a history entry (dragging, slider animation); call commit() afterwards. */
   liveUpdate(id: string, patch: Partial<MObj>): void;
+  /** Several live changes in one state update (one re-render per animation frame). */
+  liveUpdateMany(patches: Record<string, Partial<MObj>>): void;
+  setPlaying(ids: string[]): void;
+  togglePlay(id: string): void;
+  playAll(): void;
+  stopAll(): void;
+  addTracePoints(pts: Record<string, Vec3>): void;
+  clearTrace(id: string): void;
+  setRecording(start: number | null): void;
   patchObject(id: string, patch: Partial<MObj>): void;
   removeObject(id: string): void;
   renameObject(id: string, name: string): void;
@@ -159,10 +176,14 @@ export const useStore = create<State>((set, get) => {
     toast: null,
     pwa: { canInstall: false, installed: false, ios: false, updateReady: false },
     workspaces: {},
+    playing: [],
+    traces: {},
+    recording: null,
 
     setMode(mode) {
       const s = get();
       if (mode === s.mode) return;
+      get().stopAll();
       // each mode has its own objects, sheet, view and history; park the current one and bring back the target's
       const parked: ParkedWorkspace = { objects: s.objects, sheet: s.sheet, view: s.view, table: s.table, past: s.past, future: s.future };
       const next = s.workspaces[mode] ?? { objects: [], sheet: {}, view: { ...DEFAULT_VIEW }, table: { ...DEFAULT_TABLE }, past: [], future: [] };
@@ -177,6 +198,7 @@ export const useStore = create<State>((set, get) => {
         tool: 'move',
         panel: mode === 'geometry' ? 'tools' : s.panel === 'table' || s.panel === 'spreadsheet' ? (mode === '3d' ? 'algebra' : s.panel) : s.panel ?? 'algebra',
         settings: { ...s.settings, grid: mode !== 'geometry', axes: mode !== 'geometry' },
+        traces: {},
       });
     },
     setPanel: (panel) => set({ panel }),
@@ -240,6 +262,34 @@ export const useStore = create<State>((set, get) => {
     liveUpdate(id, patch) {
       set({ objects: get().objects.map((o) => (o.id === id ? { ...o, ...patch } : o)), dirty: true });
     },
+    liveUpdateMany(patches) {
+      set({ objects: get().objects.map((o) => (patches[o.id] ? { ...o, ...patches[o.id] } : o)), dirty: true });
+    },
+    setPlaying(ids) {
+      const s = get();
+      const playing = ids.filter((id, i) => ids.indexOf(id) === i && s.objects.some((o) => o.id === id && o.slider));
+      if (playing.length && !s.playing.length) beginLive();
+      set({ playing });
+      // the whole animation becomes one undo step, recorded when the last slider stops
+      if (!playing.length && s.playing.length) get().commit();
+    },
+    togglePlay(id) {
+      const p = get().playing;
+      get().setPlaying(p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+    },
+    playAll() { get().setPlaying(get().objects.filter((o) => o.slider).map((o) => o.id)); },
+    stopAll() { get().setPlaying([]); },
+    addTracePoints(pts) {
+      const traces = { ...get().traces };
+      for (const [id, p] of Object.entries(pts)) traces[id] = [...(traces[id] ?? []).slice(-4999), p];
+      set({ traces });
+    },
+    clearTrace(id) {
+      const traces = { ...get().traces };
+      delete traces[id];
+      set({ traces });
+    },
+    setRecording: (recording) => set({ recording }),
     patchObject(id, patch) {
       record({ objects: get().objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) });
     },
@@ -286,7 +336,9 @@ export const useStore = create<State>((set, get) => {
       set({ ...next, future: s.future.slice(1), past: [...s.past, snap(s)], dirty: true });
     },
     load(p, fileName) {
+      get().stopAll();
       set({
+        traces: {},
         mode: p.mode ?? 'graphing',
         objects: p.objects ?? [],
         sheet: p.sheet ?? {},
@@ -302,7 +354,9 @@ export const useStore = create<State>((set, get) => {
       });
     },
     reset() {
+      get().stopAll();
       set({
+        traces: {},
         objects: [], sheet: {}, view: { ...DEFAULT_VIEW }, past: [], future: [], dirty: false,
         selectedId: null, editingId: null, fileName: 'Untitled', table: { ...DEFAULT_TABLE }, workspaces: {},
         homeToken: get().homeToken + 1,

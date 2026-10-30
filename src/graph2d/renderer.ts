@@ -1,4 +1,4 @@
-import type { Resolved, Value, Vec2 } from '../math/types';
+import type { Resolved, Value, Vec2, Vec3 } from '../math/types';
 import type { Settings, View } from '../store/project';
 import { fmt } from '../math/solve';
 import { march } from './march';
@@ -53,13 +53,57 @@ export interface Overlay {
 
 export interface DrawOpts {
   W: number; H: number; view: View; settings: Settings; selectedId: string | null; overlay?: Overlay;
+  /** positions left behind by traced points */
+  traces?: Record<string, Vec3[]>;
+}
+
+function drawTraces(ctx: Ctx, vp: Viewport, items: Resolved[], traces: Record<string, Vec3[]>) {
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.55;
+  for (const r of items) {
+    const tr = r.obj.trace && r.obj.visible ? traces[r.obj.id] : undefined;
+    if (!tr || tr.length < 2) continue;
+    ctx.strokeStyle = r.obj.color;
+    ctx.beginPath();
+    let lx = NaN, ly = NaN;
+    for (const p of tr) {
+      const x = vp.px(p.x), y = vp.py(p.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) { lx = NaN; continue; }
+      // a jump (undo, typing new coordinates) starts a new piece instead of a long straight line
+      if (Math.hypot(x - lx, y - ly) < 120) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      lx = x; ly = y;
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** Circles around the origin and rays every 15° (major every 30°). */
+function drawPolarGrid(ctx: Ctx, vp: Viewport) {
+  const { step, minor } = niceStep(Math.min(vp.v.sx, vp.v.sy));
+  const ox = vp.px(0), oy = vp.py(0);
+  const rmax = Math.max(...[[vp.xmin, vp.ymin], [vp.xmin, vp.ymax], [vp.xmax, vp.ymin], [vp.xmax, vp.ymax]].map(([x, y]) => Math.hypot(x, y)));
+  const rmin = Math.hypot(Math.max(vp.xmin, Math.min(0, vp.xmax)), Math.max(vp.ymin, Math.min(0, vp.ymax)));
+  ctx.lineWidth = 1;
+  for (const [st, color] of [[minor, C.gridMinor], [step, C.gridMajor]] as const) {
+    ctx.strokeStyle = color;
+    for (let r = Math.max(st, Math.ceil(rmin / st) * st), n = 0; r <= rmax && n < 400; r += st, n++) {
+      ctx.beginPath(); ctx.ellipse(ox, oy, r * vp.v.sx, r * vp.v.sy, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  for (let k = 0; k < 24; k++) {
+    const a = (k * Math.PI) / 12;
+    ctx.strokeStyle = k % 2 ? C.gridMinor : C.gridMajor;
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + rmax * vp.v.sx * Math.cos(a), oy - rmax * vp.v.sy * Math.sin(a)); ctx.stroke();
+  }
 }
 
 function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
   const { step, minor } = niceStep(vp.v.sx);
   const ys = niceStep(vp.v.sy);
   const line = (x1: number, y1: number, x2: number, y2: number) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
-  if (s.grid) {
+  if (s.grid && s.polarGrid) drawPolarGrid(ctx, vp);
+  else if (s.grid) {
     ctx.lineWidth = 1;
     for (const [st, color] of [[minor, C.gridMinor], [step, C.gridMajor]] as const) {
       ctx.strokeStyle = color;
@@ -227,7 +271,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     case 'vector': seg(ctx, vp, v.a, v.b); arrowHead(ctx, vp, v.a, v.b); break;
     case 'circle': {
       ctx.beginPath();
-      ctx.ellipse(vp.px(v.c.x), vp.py(v.c.y), v.r * vp.v.sx, v.r * vp.v.sy, 0, 0, Math.PI * 2);
+      ctx.ellipse(vp.px(v.c.x), vp.py(v.c.y), Math.abs(v.r * vp.v.sx), Math.abs(v.r * vp.v.sy), 0, 0, Math.PI * 2);
       ctx.globalAlpha = 0.08; ctx.fill(); ctx.globalAlpha = 1;
       ctx.stroke();
       break;
@@ -267,14 +311,18 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     }
     case 'curve': {
       ctx.beginPath();
-      let pen = false;
-      const N = 1200;
+      let pen = false, lx = 0, ly = 0;
+      // long parameter ranges (polar spirals up to 6π, roses up to 24π) get more samples
+      const N = Math.round(Math.min(8000, Math.max(1200, (600 * Math.abs(v.t1 - v.t0)) / Math.PI)));
+      const jump = Math.max(vp.W, vp.H);
       for (let i = 0; i <= N; i++) {
         const t = v.t0 + ((v.t1 - v.t0) * i) / N;
         const x = v.fx(t), y = v.fy(t);
         if (!Number.isFinite(x) || !Number.isFinite(y)) { pen = false; continue; }
-        if (pen) ctx.lineTo(vp.px(x), vp.py(y)); else ctx.moveTo(vp.px(x), vp.py(y));
-        pen = true;
+        const px = Math.max(-1e5, Math.min(1e5, vp.px(x))), py = Math.max(-1e5, Math.min(1e5, vp.py(y)));
+        // break at poles (r = tan θ) instead of drawing a line across the view
+        if (pen && Math.hypot(px - lx, py - ly) < jump) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+        pen = true; lx = px; ly = py;
       }
       ctx.stroke();
       break;
@@ -309,6 +357,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   drawGrid(ctx, vp, o.settings);
+  if (o.traces) drawTraces(ctx, vp, items, o.traces);
 
   const labels: { p: Vec2; text: string; color: string }[] = [];
   const points: { p: Vec2; color: string; name: string; free: boolean; selected: boolean; hollow?: boolean; label: boolean }[] = [];

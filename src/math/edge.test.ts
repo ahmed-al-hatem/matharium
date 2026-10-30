@@ -14,6 +14,8 @@ describe('engine never throws on odd input', () => {
     '', '   ', '(((', ')', 'x^', '1/0', 'sqrt(-1)', 'f(x) = f(x)', 'Segment(A)', 'Foo(1, 2)', 'ابحث عن x',
     '='.repeat(5), 'x'.repeat(2000), '(1, 2, 3, 4)', '{(1,2), 3}', 'Solve()', 'Circle((0,0), -1)', 'Curve(t, t, t, 0)',
     'Integral(x, 1)', '"text"', 'x <= y <= 1', '1e999', '0/0', 'A = (1, )', 'y = ', 'Polygon(A, B)', 'Roots(x^2 + 1)',
+    'r = θ/0', 'r = tan(θ)', 'r = ', '(1; )', '(; 2)', '(1; 2; 3)', '(0; 45°)', 'r = sqrt(-θ)', 'FitPoly({(1,2)}, 5)', 'FitSin({})',
+    'FitExp({(0,0), (1,0)})', 'FitLog({(-1,2), (-2,3)})', 'FitPoly({(1,2), (2,3), (3,1)}, -1)', 'FitLine(A)',
   ];
   it.each(odd)('%j', (input) => {
     let res: ReturnType<typeof evaluateAll> | undefined;
@@ -48,7 +50,8 @@ describe('engine never throws on odd input', () => {
 });
 
 describe('renderer is robust at extreme views', () => {
-  const objs = [o('tan(x)', 'f'), o('1/x', 'g'), o('x^2 + y^2 = 0', 'eq1'), o('y > sin(x)', 'h'), o('A = (1, 2)', 'A'), o('Circle(A, 3)', 'c'), o('Integral(sin(x), 0, 3)', 'a')];
+  const objs = [o('tan(x)', 'f'), o('1/x', 'g'), o('x^2 + y^2 = 0', 'eq1'), o('y > sin(x)', 'h'), o('A = (1, 2)', 'A'), o('Circle(A, 3)', 'c'), o('Integral(sin(x), 0, 3)', 'a'),
+    o('r = 2 sin(3θ)', 'p'), o('r = tan(θ)', 'q'), o('B = (2; 30°)', 'B')];
   const views: View[] = [
     { ox: 0, oy: 0, sx: 1e-4, sy: 1e-4 },
     { ox: 0, oy: 0, sx: 1e6, sy: 1e6 },
@@ -59,6 +62,11 @@ describe('renderer is robust at extreme views', () => {
     const ctx = new SvgCtx(800, 600);
     draw(ctx, evaluateAll(objs), { W: 800, H: 600, view, settings, selectedId: 'x' });
     expect(ctx.toString()).not.toMatch(/NaN|Infinity/);
+    const polar = new SvgCtx(800, 600);
+    const traced = objs.map((x) => (x.name === 'B' ? { ...x, trace: true } : x));
+    const traces = { [objs.find((x) => x.name === 'B')!.id]: [{ x: 0, y: 0, z: 0 }, { x: 1e9, y: NaN, z: 0 }, { x: 1, y: 1, z: 0 }] };
+    draw(polar, evaluateAll(traced), { W: 800, H: 600, view, settings: { ...settings, polarGrid: true }, selectedId: null, traces });
+    expect(polar.toString()).not.toMatch(/NaN|Infinity/);
   });
 });
 

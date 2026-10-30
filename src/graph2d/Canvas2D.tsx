@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { beginLive, useStore, type ToolId } from '../store/project';
 import { useResolved } from '../store/resolved';
-import { splitDefinition } from '../math/parser';
+import { asPolar, splitDefinition } from '../math/parser';
+import { useTraceRecorder } from '../store/animate';
 import { fmtPt } from '../math/solve';
 import type { Resolved, Value, Vec2 } from '../math/types';
 import { draw, type Overlay } from './renderer';
@@ -47,6 +48,7 @@ export function Canvas2D() {
   const settings = useStore((s) => s.settings);
   const selectedId = useStore((s) => s.selectedId);
   const tool = useStore((s) => s.tool);
+  const traces = useStore((s) => s.traces);
   const [hover, setHover] = useState<Overlay['hover']>(null);
   const [mouse, setMouse] = useState<Vec2 | null>(null);
   const [pending, setPending] = useState<{ name: string; p: Vec2 }[]>([]);
@@ -57,6 +59,7 @@ export function Canvas2D() {
 
   const vp = new Viewport(view, size.W, size.H);
   const spec = TOOL_SPECS[tool];
+  useTraceRecorder(items);
 
   useEffect(() => setPending([]), [tool]);
   useEffect(() => { document.fonts?.ready.then(() => setFontsReady((n) => n + 1)); }, []);
@@ -77,10 +80,10 @@ export function Canvas2D() {
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw(ctx, items, {
-      W: size.W, H: size.H, view, settings, selectedId,
+      W: size.W, H: size.H, view, settings, selectedId, traces,
       overlay: { hover, pending: pending.map((p) => p.p), mouse, toolShape: spec?.shape ?? null },
     });
-  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady]);
+  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady, traces]);
 
   // exporters
   useEffect(() => {
@@ -89,15 +92,15 @@ export function Canvas2D() {
       c.width = size.W * 2; c.height = size.H * 2;
       const ctx = c.getContext('2d')!;
       ctx.scale(2, 2);
-      draw(ctx, items, { W: size.W, H: size.H, view, settings, selectedId: null });
+      draw(ctx, items, { W: size.W, H: size.H, view, settings, selectedId: null, traces });
       return c.toDataURL('image/png');
     };
     exporters.svg = () => {
       const s = new SvgCtx(size.W, size.H);
-      draw(s, items, { W: size.W, H: size.H, view, settings, selectedId: null });
+      draw(s, items, { W: size.W, H: size.H, view, settings, selectedId: null, traces });
       return s.toString();
     };
-  }, [items, view, settings, size]);
+  }, [items, view, settings, size, traces]);
 
   const local = (e: { clientX: number; clientY: number }) => {
     const r = canvas.current!.getBoundingClientRect();
@@ -213,8 +216,13 @@ export function Canvas2D() {
         const o = store().objects.find((x) => x.id === d.id);
         if (!o) return;
         const p = snapW(w);
-        const named = splitDefinition(o.input).name;
-        store().liveUpdate(o.id, { input: `${named ? `${named} = ` : ''}(${p.x}, ${p.y})` });
+        const def = splitDefinition(o.input);
+        const named = def.name ? `${def.name} = ` : '';
+        // a polar point stays polar: (r; θ°)
+        const coords = asPolar(def.body)
+          ? `(${+Math.hypot(p.x, p.y).toFixed(4)}; ${+((Math.atan2(p.y, p.x) * 180) / Math.PI).toFixed(2)}°)`
+          : `(${p.x}, ${p.y})`;
+        store().liveUpdate(o.id, { input: `${named}${coords}` });
         setHover({ p, color: o.color, text: `${o.name} ${fmtPt(p, 2)}` });
       }
       return;

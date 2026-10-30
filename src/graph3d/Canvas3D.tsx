@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { useStore } from '../store/project';
 import { useResolved } from '../store/resolved';
-import { build, clipPlanes, dispose, label } from './meshes';
+import { build, clipPlanes, dispose, label, traceLine } from './meshes';
+import { useTraceRecorder } from '../store/animate';
 import { exporters } from '../io/fileio';
 import { cam3d } from './handle';
 
@@ -18,7 +19,7 @@ function niceStep(x: number) {
   return [1, 2, 5, 10].map((m) => m * p).find((s) => s >= x * 0.999)!;
 }
 
-function buildAxes(R: number, show: boolean, grid: boolean) {
+function buildAxes(R: number, show: boolean, grid: boolean, polar = false) {
   const g = new THREE.Group();
   const step = niceStep(R / 6);
   const ticks: number[] = [];
@@ -26,7 +27,20 @@ function buildAxes(R: number, show: boolean, grid: boolean) {
   if (grid) {
     const major: number[] = [], minor: number[] = [];
     const half = step / 2;
-    for (let i = -Math.floor(R / half); i * half <= R + 1e-9; i++) {
+    if (polar) {
+      // circles every half step and rays every 15° in the z = 0 plane
+      for (let i = 1; i * half <= R + 1e-9; i++) {
+        const r = i * half, out = i % 2 ? minor : major;
+        for (let k = 0; k < 96; k++) {
+          const a0 = (k / 96) * Math.PI * 2, a1 = ((k + 1) / 96) * Math.PI * 2;
+          out.push(r * Math.cos(a0), r * Math.sin(a0), 0, r * Math.cos(a1), r * Math.sin(a1), 0);
+        }
+      }
+      for (let k = 0; k < 24; k++) {
+        const a = (k * Math.PI) / 12;
+        (k % 2 ? minor : major).push(0, 0, 0, R * Math.cos(a), R * Math.sin(a), 0);
+      }
+    } else for (let i = -Math.floor(R / half); i * half <= R + 1e-9; i++) {
       const v = i * half;
       (i % 2 ? minor : major).push(v, -R, 0, v, R, 0, -R, v, 0, R, v, 0);
     }
@@ -63,10 +77,12 @@ function buildAxes(R: number, show: boolean, grid: boolean) {
 
 export function Canvas3D() {
   const wrap = useRef<HTMLDivElement>(null);
-  const ctx = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; controls: OrbitControls; content: THREE.Group; axes: THREE.Group; render: () => void } | null>(null);
+  const ctx = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; controls: OrbitControls; content: THREE.Group; axes: THREE.Group; trails: THREE.Group; render: () => void } | null>(null);
   const items = useResolved();
   const settings = useStore((s) => s.settings);
   const homeToken = useStore((s) => s.homeToken);
+  const traces = useStore((s) => s.traces);
+  useTraceRecorder(items);
   // the visible range follows the camera: zooming out doubles it, zooming in halves it, so the grid never runs out
   const [level, setLevel] = useState(0);
   const base = settings.range3d;
@@ -90,6 +106,7 @@ export function Canvas3D() {
     const d2 = new THREE.DirectionalLight(0xbfd4ff, 0.45); d2.position.set(-8, 6, -4); scene.add(d2);
     const content = new THREE.Group(); scene.add(content);
     const axes = new THREE.Group(); scene.add(axes);
+    const trails = new THREE.Group(); scene.add(trails);
     const controls = new OrbitControls(camera, renderer.domElement);
     const render = () => renderer.render(scene, camera);
     controls.addEventListener('change', () => {
@@ -101,7 +118,7 @@ export function Canvas3D() {
       setLevel(Math.max(-8, Math.min(12, lv)));
       render();
     });
-    ctx.current = { renderer, scene, camera, controls, content, axes, render };
+    ctx.current = { renderer, scene, camera, controls, content, axes, trails, render };
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth, h = el.clientHeight;
       renderer.setSize(w, h);
@@ -141,9 +158,9 @@ export function Canvas3D() {
     const c = ctx.current!;
     c.axes.children.forEach(dispose);
     c.axes.clear();
-    c.axes.add(buildAxes(R, settings.axes, settings.grid));
+    c.axes.add(buildAxes(R, settings.axes, settings.grid, settings.polarGrid));
     c.render();
-  }, [R, settings.axes, settings.grid]);
+  }, [R, settings.axes, settings.grid, settings.polarGrid]);
 
   // objects
   useEffect(() => {
@@ -161,6 +178,19 @@ export function Canvas3D() {
     }
     c.render();
   }, [items, R, settings.labels]);
+
+  // traces of moving points
+  useEffect(() => {
+    const c = ctx.current!;
+    c.trails.children.forEach(dispose);
+    c.trails.clear();
+    const planes = clipPlanes(R * 1.0001);
+    for (const r of items) {
+      const tr = r.obj.trace && r.obj.visible ? traces[r.obj.id] : undefined;
+      if (tr && tr.length > 1) c.trails.add(traceLine(tr, r.obj.color, planes));
+    }
+    c.render();
+  }, [items, R, traces]);
 
   return <div ref={wrap} className="canvas-wrap canvas-3d" aria-label="3D graph" />;
 }

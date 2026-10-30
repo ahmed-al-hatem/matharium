@@ -1,12 +1,17 @@
 import type { MathNode } from 'mathjs';
 import { compileFn, freeSymbols, isKnownName, math, parseExpr, texName, toTex, UndefinedSymbolError, type Scope } from './compile';
-import { asCommand, asList, asTuple, normalize, splitDefinition, splitRelation } from './parser';
+import { asCommand, asList, asPolar, asPolarCurve, asTuple, normalize, splitDefinition, splitRelation } from './parser';
 import { clean, extrema, fmt, fmtPt, integrate, derivative as numDeriv, roots, solveSystem } from './solve';
 import { angle, asLine, circleThrough, dist, implicitOf, intersectGeom, mid, polygonArea, projectOnLine, sub } from './geometry';
+import { FITS, fitExpr } from './fit';
+import { polarRange, polarXY } from './polar';
 import type { Fn1, Fn2, MObj, Resolved, Value, Vec2, Vec3 } from './types';
 
 const VARS = ['x', 'y', 'z', 't'];
 const NUM_LITERAL = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i;
+/** A number, optionally in degrees (normalize turns ° into *(pi/180)). */
+const ANGLE_LITERAL = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*(\*\(pi\/180\))?\s*$/i;
+const DEG_SUFFIX = /^([\s\S]*)\*\(pi\/180\)\s*$/;
 
 interface Out { value: Value; display?: string; tex?: string }
 
@@ -19,6 +24,8 @@ function tryTex(src: string): string {
   if (rel) return `${tryTex(rel.lhs)} ${({ '=': '=', '<': '<', '>': '>', '<=': '\\le', '>=': '\\ge' })[rel.op]} ${tryTex(rel.rhs)}`;
   const tup = asTuple(src);
   if (tup) return `\\left(${tup.map(tryTex).join(', ')}\\right)`;
+  const pol = asPolar(src);
+  if (pol) return `\\left(${tryTex(pol[0])};\\ ${angleTex(pol[1])}\\right)`;
   const list = asList(src);
   if (list) return `\\left\\{${list.map(tryTex).join(', ')}\\right\\}`;
   const cmd = asCommand(src);
@@ -28,6 +35,25 @@ function tryTex(src: string): string {
   } catch {
     return `\\text{${texEscape(src)}}`;
   }
+}
+
+function angleTex(src: string): string {
+  const m = DEG_SUFFIX.exec(src.trim());
+  return m ? `${tryTex(m[1])}^\\circ` : tryTex(src);
+}
+
+/** R² rounded down, so a good fit never shows as a perfect 1. */
+function r2Text(r2: number, digits: number) {
+  if (r2 >= 1 - 1e-12) return '1';
+  const p = 10 ** digits;
+  return fmt(Math.floor(r2 * p) / p, digits);
+}
+
+/** "6π", "2π", "π" for a θ bound. */
+function piText(v: number) {
+  const k = v / Math.PI;
+  if (Math.abs(k - Math.round(k)) < 1e-9) return Math.round(k) === 1 ? 'π' : `${Math.round(k)}π`;
+  return fmt(v, 4);
 }
 
 export class Engine {
@@ -95,9 +121,20 @@ export class Engine {
     }
     const tup = asTuple(src);
     if (tup) return this.evalTuple(tup).value;
+    const pol = asPolar(src);
+    if (pol) return this.evalPolar(pol).value;
+    const list = asList(src);
+    if (list) return this.evalList(list);
     const cmd = asCommand(src);
     if (cmd) return this.command(cmd.name, cmd.args, 'tmp').value;
     return undefined;
+  }
+
+  /** Points of a list literal or a named list / polygon. */
+  ptList(src: string): Vec2[] {
+    const v = this.obj(src);
+    if (v?.type === 'points' || v?.type === 'polygon') return v.pts;
+    throw new EvalError(`Expected a list of points: ${src}`);
   }
 
   pt(src: string): Vec2 {
@@ -142,6 +179,21 @@ export class Engine {
     const c = parts.map((p) => clean(this.num(p)));
     if (c.length === 3) return { value: { type: 'point3d', p: { x: c[0], y: c[1], z: c[2] } }, display: `(${c.map((v) => this.f(v)).join(', ')})` };
     return { value: { type: 'point', p: { x: c[0], y: c[1] }, free }, display: free ? undefined : fmtPt({ x: c[0], y: c[1] }, this.digits) };
+  }
+
+  /** "(r; θ)": a point given by its distance from the origin and its angle. */
+  evalPolar([rs, ts]: [string, string]): Out {
+    const free = NUM_LITERAL.test(rs) && ANGLE_LITERAL.test(ts);
+    const r = this.num(rs), th = this.num(ts);
+    const p = { x: clean(r * Math.cos(th)), y: clean(r * Math.sin(th)) };
+    return { value: { type: 'point', p, free }, display: fmtPt(p, this.digits) };
+  }
+
+  evalList(list: string[]): Value {
+    const items = list.map((s) => { const pol = asPolar(s); return pol ? this.evalPolar(pol).value : this.evalTuple(asTuple(s) ?? [s]).value; });
+    if (items.every((v) => v.type === 'point')) return { type: 'points', pts: items.map((v) => (v as { p: Vec2 }).p) };
+    if (items.every((v) => v.type === 'point3d')) return { type: 'points3d', pts: items.map((v) => (v as { p: Vec3 }).p) };
+    throw new EvalError('Lists may contain points only');
   }
 
   ptsDisplay(pts: Vec2[]) {
@@ -290,7 +342,8 @@ export class Engine {
         }
         const c = this.pt(A[0]);
         const second = this.obj(A[1]);
-        const r = second?.type === 'point' ? dist(c, second.p) : this.num(A[1]);
+        // a slider radius may pass through negative values while animating
+        const r = second?.type === 'point' ? dist(c, second.p) : Math.abs(this.num(A[1]));
         return { value: { type: 'circle', c, r }, display: this.circleEq(c, r) };
       }
       case 'Polygon': {
@@ -395,6 +448,18 @@ export class Engine {
         const c = (i: number) => compileFn(this.node(A[i]), [u, v], this.scope) as Fn2;
         return { value: { type: 'psurface', fx: c(0), fy: c(1), fz: c(2), u0: this.num(A[4]), u1: this.num(A[5]), v0: this.num(A[7]), v1: this.num(A[8]) } };
       }
+      case 'FitLine': case 'FitPoly': case 'FitExp': case 'FitLog': case 'FitPow': case 'FitSin': {
+        need(name === 'FitPoly' ? 2 : 1);
+        const fit = FITS[name](this.ptList(A[0]), name === 'FitPoly' ? this.num(A[1]) : undefined);
+        // full precision for f' and Derivative, rounded coefficients for display
+        this.nodes.set(selfName, { node: this.node(fitExpr(fit)), param: 'x' });
+        const tex = toTex(this.node(fitExpr(fit, this.digits)));
+        return {
+          value: { type: 'function', f: fit.f, param: 'x', tex },
+          tex: `${texName(selfName)}(x) = ${tex}`,
+          display: `R² = ${r2Text(fit.r2, Math.max(4, this.digits))}`,
+        };
+      }
       case 'Sphere': {
         need(2);
         const c = this.pt3(A[0]); const r = this.num(A[1]);
@@ -450,20 +515,25 @@ export class Engine {
     }
 
     const list = asList(body);
-    if (list) {
-      const items = list.map((s) => this.evalTuple(asTuple(s) ?? [s]).value);
-      if (items.every((v) => v.type === 'point')) {
-        const pts = items.map((v) => (v as { p: Vec2 }).p);
-        return { value: { type: 'points', pts }, tex: `${texName(name)} = ${tryTex(body)}` };
-      }
-      if (items.every((v) => v.type === 'point3d')) return { value: { type: 'points3d', pts: items.map((v) => (v as { p: Vec3 }).p) }, tex: `${texName(name)} = ${tryTex(body)}` };
-      throw new EvalError('Lists may contain points only');
-    }
+    if (list) return { value: this.evalList(list), tex: `${texName(name)} = ${tryTex(body)}` };
 
     const tup = asTuple(body);
     if (tup) {
       const out = this.evalTuple(tup);
       return { ...out, tex: `${texName(name)} = ${tryTex(body)}` };
+    }
+
+    const pol = asPolar(body);
+    if (pol) return { ...this.evalPolar(pol), tex: `${texName(name)} = ${tryTex(body)}` };
+
+    const polar = asPolarCurve(body);
+    if (polar) {
+      const n = this.node(polar);
+      const bad = this.unknowns(n).filter((s) => s !== 'theta');
+      if (bad.length) throw new UndefinedSymbolError(bad[0]);
+      const r = compileFn(n, ['theta'], this.scope) as Fn1;
+      const t1 = polarRange(r);
+      return { value: { type: 'curve', ...polarXY(r), t0: 0, t1 }, tex: `r = ${toTex(n)}`, display: `0 ≤ θ ≤ ${piText(t1)}` };
     }
 
     const rel = splitRelation(body);

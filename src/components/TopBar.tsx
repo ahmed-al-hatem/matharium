@@ -4,6 +4,7 @@ import { useT } from '../i18n/i18n';
 import { exportCSV, exportPNG, exportSVG, newProject, openProject, saveProject, shareLink } from '../io/fileio';
 import { Icon } from './Icons';
 import { install } from '../io/pwa';
+import { startRecording, stopRecording } from '../io/record';
 
 const MODES: { id: Mode; icon: () => JSX.Element }[] = [
   { id: 'graphing', icon: Icon.graph },
@@ -29,6 +30,7 @@ export function TopBar({ onHelp }: { onHelp(): void }) {
   const dirty = useStore((s) => s.dirty);
   const lang = useStore((s) => s.settings.lang);
   const pwa = useStore((s) => s.pwa);
+  const recording = useStore((s) => s.recording !== null);
   const showInstall = !pwa.installed && (pwa.canInstall || pwa.ios);
   const st = useStore.getState();
   const [drawer, setDrawer] = useState(false);
@@ -86,6 +88,7 @@ export function TopBar({ onHelp }: { onHelp(): void }) {
             <h3>Export</h3>
             <button onClick={run(exportPNG)}><Icon.image />{t('exportPng')}</button>
             <button onClick={run(exportSVG)}><Icon.image />{t('exportSvg')}</button>
+            <button onClick={run(recording ? stopRecording : startRecording)}><Icon.video />{t(recording ? 'stopRecording' : 'recordVideo')}</button>
             <button onClick={run(() => exportCSV('table'))}><Icon.download />{t('exportCsv')}</button>
             <button onClick={run(() => exportCSV('sheet'))}><Icon.download />{t('exportSheetCsv')}</button>
             <h3>{t('view')}</h3>
