@@ -95,4 +95,20 @@ describe('performance budgets', () => {
     expect(ms).toBeLessThan(120);
     console.log(`draw 5 implicit: ${ms.toFixed(0)} ms`);
   });
+
+  it.each([
+    ['default view', { ox: 0, oy: 0, sx: 50, sy: 50 }],
+    ['zoomed out', { ox: 0, oy: 0, sx: 0.5, sy: 0.5 }],
+    ['origin far away', { ox: 4000, oy: 2500, sx: 50, sy: 50 }],
+    ['stretched', { ox: 0, oy: 0, sx: 200, sy: 3 }],
+  ] as [string, View][])('draws five implicit curves on a polar grid (%s) within budget', (_n, view) => {
+    const objs = [o('x^2 + y^2 = 9'), o('x^3 - y^2 = 1'), o('sin(x) = cos(y)'), o('x y = 2'), o('x^2 - y^2 = 1')];
+    const items = evaluateAll(objs);
+    const opts = { W: 1400, H: 860, view, settings: { ...settings, gridType: 'polar' as const }, selectedId: null };
+    draw(noop, items, opts);
+    const t = performance.now();
+    draw(noop, items, opts);
+    const ms = performance.now() - t;
+    expect(ms).toBeLessThan(120);
+  });
 });

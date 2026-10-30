@@ -4,7 +4,7 @@ import { draw } from '../graph2d/renderer';
 import { SvgCtx } from '../graph2d/svgctx';
 import { evalSheet } from '../math/sheet';
 import type { MObj } from '../math/types';
-import { DEFAULT_SETTINGS } from '../store/project';
+import { DEFAULT_SETTINGS, GRID_TYPES } from '../store/project';
 
 const objs: MObj[] = [
   { id: '1', name: 'f', input: 'f(x) = x^2 - 2', color: '#E45B45', visible: true },
@@ -25,6 +25,38 @@ describe('svg export', () => {
     expect(svg).toContain('stroke="#E45B45"');
     expect(svg).toContain('>A</text>');
     expect(svg).not.toContain('NaN');
+  });
+});
+
+describe('grid types in svg export', () => {
+  const views = {
+    normal: { ox: 0, oy: 0, sx: 40, sy: 40 },
+    stretched: { ox: 1, oy: -2, sx: 60, sy: 15 },
+    'origin off-screen': { ox: 500, oy: -300, sx: 30, sy: 30 },
+    'zoomed out': { ox: 0, oy: 0, sx: 0.002, sy: 0.002 },
+  };
+  const svgFor = (gridType: (typeof GRID_TYPES)[number], view: { ox: number; oy: number; sx: number; sy: number }, extra = {}) => {
+    const ctx = new SvgCtx(400, 300);
+    draw(ctx, evaluateAll(objs), { W: 400, H: 300, view, selectedId: null, settings: { ...DEFAULT_SETTINGS, gridType, ...extra } });
+    return ctx.toString();
+  };
+  for (const g of GRID_TYPES) {
+    it.each(Object.entries(views))(`${g}: %s has no NaN`, (_n, view) => {
+      const svg = svgFor(g, view);
+      expect(svg).not.toMatch(/NaN|Infinity/);
+    });
+  }
+  it('draws what each type looks like', () => {
+    const base = svgFor('majorMinor', views.normal, { axes: false });
+    const major = svgFor('major', views.normal, { axes: false });
+    expect(major.length).toBeLessThan(base.length);
+    expect(svgFor('polar', views.normal, { axes: false })).toMatch(/A\d/); // circles are arcs
+    expect(svgFor('polar', views.normal, { angle: 'deg' })).toContain('>30°<');
+    expect(svgFor('polar', views.normal)).toContain('>π/6<');
+    const dots = svgFor('dots', views.normal, { axes: false });
+    expect(dots).toContain('<rect');
+    expect(dots).not.toContain('rgba(120,121,120,0.1)"'); // no minor lines
+    expect(svgFor('isometric', views.normal, { axes: false })).not.toBe(base);
   });
 });
 

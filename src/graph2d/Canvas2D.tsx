@@ -7,7 +7,8 @@ import { canHostPoint, paramOf, pointAt } from '../math/geometry';
 import type { Resolved, Value, Vec2 } from '../math/types';
 import { draw, type Overlay } from './renderer';
 import { SvgCtx } from './svgctx';
-import { niceStep, Viewport } from './viewport';
+import { Viewport } from './viewport';
+import { snapPoint } from './grid';
 import { hitTest } from './hit';
 import { exporters } from '../io/fileio';
 import { useT } from '../i18n/i18n';
@@ -110,10 +111,7 @@ export function Canvas2D() {
 
   const snapW = (p: Vec2): Vec2 => {
     if (!settings.snap) return { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
-    const sx = niceStep(view.sx).minor, sy = niceStep(view.sy).minor;
-    const q = { x: Math.round(p.x / sx) * sx, y: Math.round(p.y / sy) * sy };
-    const close = Math.hypot((q.x - p.x) * view.sx, (q.y - p.y) * view.sy) < 10;
-    return close ? { x: +q.x.toFixed(6), y: +q.y.toFixed(6) } : { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
+    return snapPoint(p, view, settings.gridType);
   };
 
   const store = useStore.getState;

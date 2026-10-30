@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { labelDefault, useStore } from '../store/project';
+import { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js';
+import { labelDefault, useStore, type Projection } from '../store/project';
 import { useResolved } from '../store/resolved';
 import { build, clipPlanes, dispose, label } from './meshes';
 import { exporters } from '../io/fileio';
@@ -11,6 +12,39 @@ import { cam3d } from './handle';
 const AXIS_COLORS = ['#E45B45', '#6DC4AA', '#3282F6'];
 /** Camera offset from the target at "home", in units of the range. */
 const HOME = new THREE.Vector3(2.1, -2.6, 1.7);
+
+// AnaglyphEffect keeps its StereoCamera private and fixes the eye separation at 0.064, which is far too small for a camera
+// some 30 units away; tie it to the focus distance (set to the orbit distance before each anaglyph render) instead.
+const stereoUpdate = THREE.StereoCamera.prototype.update;
+THREE.StereoCamera.prototype.update = function (this: THREE.StereoCamera, cam: THREE.PerspectiveCamera) {
+  this.eyeSep = cam.focus / 30;
+  stereoUpdate.call(this, cam);
+};
+
+/** Cabinet projection: depth recedes at 45°, drawn at half length. */
+const OBLIQUE = { k: 0.5, angle: Math.PI / 4 };
+
+/**
+ * Point the parallel camera along the orbit camera's line of sight with a frustum that shows the target at the same size,
+ * and for oblique add a shear so depth (measured from the target) shifts x and y.
+ */
+function syncParallel(ortho: THREE.OrthographicCamera, cam: THREE.PerspectiveCamera, target: THREE.Vector3, oblique: boolean) {
+  const dist = cam.position.distanceTo(target);
+  const h = dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)), w = h * cam.aspect;
+  ortho.position.copy(cam.position);
+  ortho.quaternion.copy(cam.quaternion);
+  Object.assign(ortho, { left: -w, right: w, top: h, bottom: -h, near: -dist * 20, far: dist * 50 });
+  ortho.updateProjectionMatrix();
+  if (oblique) {
+    // in view space the target is at z = -dist and depth beyond it is z + dist < 0; it recedes up and to the right:
+    // x' = x - k cos(a) (z + dist), y' = y - k sin(a) (z + dist)
+    const cx = OBLIQUE.k * Math.cos(OBLIQUE.angle), cy = OBLIQUE.k * Math.sin(OBLIQUE.angle);
+    const shear = new THREE.Matrix4().set(1, 0, -cx, -cx * dist, 0, 1, -cy, -cy * dist, 0, 0, 1, 0, 0, 0, 0, 1);
+    ortho.projectionMatrix.multiply(shear);
+    ortho.projectionMatrixInverse.copy(ortho.projectionMatrix).invert();
+  }
+  ortho.updateMatrixWorld();
+}
 
 /** Smallest 1/2/5 × 10^k that is ≥ x. */
 function niceStep(x: number) {
@@ -38,7 +72,7 @@ function buildAxes(R: number, show: boolean, grid: boolean, showPlane: boolean) 
     g.add(lines(minor, 0x1c1d1c), lines(major, 0x3a3b3a));
   }
   if (showPlane) {
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(2 * R, 2 * R), new THREE.MeshBasicMaterial({ color: 0x787978, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }));
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(2 * R, 2 * R), new THREE.MeshBasicMaterial({ color: 0x787978, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false }));
     g.add(plane);
   }
   if (!show) return g;
@@ -69,6 +103,7 @@ export function Canvas3D() {
   const items = useResolved();
   const settings = useStore((s) => s.settings);
   const homeToken = useStore((s) => s.homeToken);
+  const projRef = useRef<Projection>(settings.projection);
   // the visible range follows the camera: zooming out doubles it, zooming in halves it, so the grid never runs out
   const [level, setLevel] = useState(0);
   const base = settings.range3d;
@@ -93,7 +128,21 @@ export function Canvas3D() {
     const content = new THREE.Group(); scene.add(content);
     const axes = new THREE.Group(); scene.add(axes);
     const controls = new OrbitControls(camera, renderer.domElement);
-    const render = () => renderer.render(scene, camera);
+    // the orbit controls always drive the perspective camera; the other projections follow its pose, so switching keeps the angle
+    const ortho = new THREE.OrthographicCamera();
+    let anaglyph: AnaglyphEffect | null = null;
+    const render = () => {
+      const p = projRef.current;
+      if (p !== 'anaglyph' && anaglyph) { anaglyph.dispose(); anaglyph = null; }
+      if (p === 'anaglyph') {
+        if (!anaglyph) { anaglyph = new AnaglyphEffect(renderer); anaglyph.setSize(el.clientWidth, el.clientHeight); }
+        camera.focus = camera.position.distanceTo(controls.target);
+        anaglyph.render(scene, camera);
+      } else if (p === 'orthographic' || p === 'oblique') {
+        syncParallel(ortho, camera, controls.target, p === 'oblique');
+        renderer.render(scene, ortho);
+      } else renderer.render(scene, camera);
+    };
     controls.addEventListener('change', () => {
       const dist = camera.position.distanceTo(controls.target);
       camera.near = dist / 1000;
@@ -107,6 +156,7 @@ export function Canvas3D() {
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth, h = el.clientHeight;
       renderer.setSize(w, h);
+      anaglyph?.setSize(w, h);
       camera.aspect = w / Math.max(1, h);
       camera.updateProjectionMatrix();
       render();
@@ -121,6 +171,7 @@ export function Canvas3D() {
     return () => {
       ro.disconnect();
       controls.dispose();
+      anaglyph?.dispose();
       dispose(scene);
       renderer.dispose();
       el.removeChild(renderer.domElement);
@@ -137,6 +188,12 @@ export function Canvas3D() {
     c.controls.update();
     c.render();
   }, [homeToken, base]);
+
+  // projection
+  useEffect(() => {
+    projRef.current = settings.projection;
+    ctx.current!.render();
+  }, [settings.projection]);
 
   // axes + grid
   useEffect(() => {

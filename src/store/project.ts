@@ -16,13 +16,17 @@ export type ToolId =
 export interface View { ox: number; oy: number; sx: number; sy: number }
 export type LabelMode = 'auto' | 'points' | 'all' | 'none';
 export type SettingsTab = 'general' | 'graphics' | '3d';
+export const GRID_TYPES = ['majorMinor', 'major', 'polar', 'isometric', 'dots'] as const;
+export type GridType = (typeof GRID_TYPES)[number];
+export const PROJECTIONS = ['perspective', 'orthographic', 'oblique', 'anaglyph'] as const;
+export type Projection = (typeof PROJECTIONS)[number];
 export interface Settings {
   // 2D graphics
-  grid: boolean; axes: boolean; snap: boolean; axisLabels: { x: string; y: string };
+  grid: boolean; axes: boolean; snap: boolean; axisLabels: { x: string; y: string }; gridType: GridType;
   // general
   labels: LabelMode; digits: number; sigFigs: boolean; angle: 'deg' | 'rad'; fontSize: number;
   // 3D
-  axes3d: boolean; plane3d: boolean; grid3d: boolean; range3d: number;
+  axes3d: boolean; plane3d: boolean; grid3d: boolean; range3d: number; projection: Projection;
   /** A device preference (localStorage), not saved with the project. */
   lang: 'en' | 'ar';
 }
@@ -33,7 +37,7 @@ interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
 export interface Workspace { objects: MObj[]; sheet: Record<string, string>; view: View; table: TableCfg }
 
 export interface ProjectFile {
-  app: 'matharium'; version: 2; mode: Mode; view: View; settings: Omit<Settings, 'lang'>;
+  app: 'matharium'; version: 3; mode: Mode; view: View; settings: Omit<Settings, 'lang'>;
   objects: MObj[]; sheet: Record<string, string>; table: TableCfg;
   /** The other modes' workspaces (the current mode's lives in the fields above). */
   workspaces?: Partial<Record<Mode, Workspace>>;
@@ -48,17 +52,19 @@ const DEFAULT_TABLE: TableCfg = { ids: [], start: -5, end: 5, step: 1 };
 
 interface ParkedWorkspace extends Workspace { past: Snapshot[]; future: Snapshot[] }
 export const DEFAULT_SETTINGS: Settings = {
-  grid: true, axes: true, snap: true, axisLabels: { x: 'x', y: 'y' },
+  grid: true, axes: true, snap: true, axisLabels: { x: 'x', y: 'y' }, gridType: 'majorMinor',
   labels: 'auto', digits: 4, sigFigs: false, angle: 'rad', fontSize: 14,
-  axes3d: true, plane3d: true, grid3d: true, range3d: 6, lang: 'en',
+  axes3d: true, plane3d: true, grid3d: true, range3d: 6, projection: 'perspective', lang: 'en',
 };
 
-/** Bring settings from any file version up to the current one (v1 had boolean labels and shared 2D/3D axes and grid). */
+/** Bring settings from any file version up to the current one (v1 had boolean labels and shared 2D/3D axes and grid; v3 added grid type and projection). */
 export function migrateSettings(raw: Record<string, unknown> | undefined): Omit<Settings, 'lang'> {
   const r = { ...(raw ?? {}) } as Record<string, unknown>;
   if (typeof r.labels === 'boolean') r.labels = r.labels ? 'all' : 'none';
   if (r.axes3d === undefined && typeof r.axes === 'boolean') r.axes3d = r.axes;
   if (r.grid3d === undefined && typeof r.grid === 'boolean') r.grid3d = r.grid;
+  if (!GRID_TYPES.includes(r.gridType as GridType)) delete r.gridType;
+  if (!PROJECTIONS.includes(r.projection as Projection)) delete r.projection;
   const { lang: _lang, ...rest } = { ...DEFAULT_SETTINGS, ...r } as Settings;
   return rest;
 }
@@ -352,7 +358,7 @@ export const useStore = create<State>((set, get) => {
         .map(([m, w]) => [m, { objects: w.objects, sheet: w.sheet, view: w.view, table: w.table }]));
       const { lang: _lang, ...settings } = s.settings;
       return {
-        app: 'matharium', version: 2, mode: s.mode, view: s.view, settings, objects: s.objects, sheet: s.sheet, table: s.table,
+        app: 'matharium', version: 3, mode: s.mode, view: s.view, settings, objects: s.objects, sheet: s.sheet, table: s.table,
         ...(Object.keys(workspaces).length ? { workspaces } : {}),
       };
     },

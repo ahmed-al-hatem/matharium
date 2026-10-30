@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useStore, type LabelMode, type SettingsTab } from '../store/project';
+import { GRID_TYPES, PROJECTIONS, useStore, type GridType, type LabelMode, type Projection, type SettingsTab } from '../store/project';
 import { useT } from '../i18n/i18n';
 import { Viewport } from '../graph2d/viewport';
 import { Icon } from './Icons';
@@ -146,8 +146,8 @@ function GraphicsTab() {
     <>
       <Check k="axes" label="axes" /><Check k="grid" label="grid" /><Check k="snap" label="snap" />
       <Field label={t('gridType')}>
-        <select className="field" value="majorMinor" disabled title={t('moreSoon')}>
-          <option value="majorMinor">{t('gridType.majorMinor')}</option>
+        <select className="field" value={s.gridType} onChange={(e) => st.setSettings({ gridType: e.target.value as GridType })}>
+          {GRID_TYPES.map((g) => <option key={g} value={g}>{t(`gridType.${g}`)}</option>)}
         </select>
       </Field>
       <div className="form-row"><span>{t('xRange')}</span>
@@ -173,13 +173,13 @@ function GraphicsTab() {
 
 function View3DTab() {
   const t = useT();
-  const range3d = useStore((x) => x.settings.range3d);
+  const { range3d, projection } = useStore((x) => x.settings);
   return (
     <>
       <Check k="axes3d" label="axes" /><Check k="plane3d" label="plane" /><Check k="grid3d" label="grid" />
       <Field label={t('projection')}>
-        <select className="field" value="perspective" disabled title={t('moreSoon')}>
-          <option value="perspective">{t('proj.perspective')}</option>
+        <select className="field" value={projection} onChange={(e) => useStore.getState().setSettings({ projection: e.target.value as Projection })}>
+          {PROJECTIONS.map((p) => <option key={p} value={p}>{t(`proj.${p}`)}</option>)}
         </select>
       </Field>
       <Field label={t('range3d')}>

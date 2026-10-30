@@ -82,7 +82,7 @@ describe('settings in project files', () => {
     expect(migrateSettings({ labels: true }).labels).toBe('all');
     expect(migrateSettings(undefined)).toMatchObject({ labels: 'auto', fontSize: 14 });
   });
-  it('opens a version 1 file, keeps the device language and saves version 2 without it', () => {
+  it('opens a version 1 file, keeps the device language and saves version 3 without it', () => {
     const st = useStore.getState();
     st.setSettings({ lang: 'ar' });
     const v1 = {
@@ -94,9 +94,27 @@ describe('settings in project files', () => {
     const s = useStore.getState().settings;
     expect(s).toMatchObject({ lang: 'ar', labels: 'all', digits: 3, angle: 'rad' });
     const out = useStore.getState().toFile();
-    expect(out.version).toBe(2);
+    expect(out.version).toBe(3);
     expect('lang' in out.settings).toBe(false);
     st.setSettings({ lang: 'en' });
+  });
+  it('opens a version 2 file with the default grid type and projection', () => {
+    const st = useStore.getState();
+    const v2 = {
+      app: 'matharium', version: 2, mode: 'graphing', view: { ox: 0, oy: 0, sx: 50, sy: 50 },
+      settings: { ...migrateSettings(undefined), gridType: undefined, projection: undefined, plane3d: false },
+      objects: [o('f(x) = x^3', 'f')], sheet: {}, table: { ids: [], start: -5, end: 5, step: 1 },
+    } as unknown as ProjectFile;
+    st.load(v2);
+    expect(useStore.getState().settings).toMatchObject({ gridType: 'majorMinor', projection: 'perspective', plane3d: false });
+    expect(migrateSettings({ gridType: 'hexagonal', projection: 'fisheye' })).toMatchObject({ gridType: 'majorMinor', projection: 'perspective' });
+    st.setSettings({ gridType: 'polar', projection: 'oblique' });
+    const out = useStore.getState().toFile();
+    expect(out).toMatchObject({ version: 3, settings: { gridType: 'polar', projection: 'oblique' } });
+    st.load(out);
+    expect(useStore.getState().settings).toMatchObject({ gridType: 'polar', projection: 'oblique' });
+    st.reset();
+    st.setSettings({ gridType: 'majorMinor', projection: 'perspective' });
   });
   it('opens settings on the tab of the current mode', () => {
     const st = useStore.getState();
