@@ -109,10 +109,11 @@ export function clean(v: number) {
   return Math.abs(v - r) < 1e-9 ? r : v;
 }
 
-export function fmt(v: number, digits = 4): string {
+/** Round to `digits` decimal places, or to `digits` significant figures when `sig` is set. */
+export function fmt(v: number, digits = 4, sig = false): string {
   if (!Number.isFinite(v)) return Number.isNaN(v) ? 'undefined' : v > 0 ? '∞' : '−∞';
-  const r = Number(v.toFixed(digits));
+  const r = sig ? Number(v.toPrecision(Math.min(Math.max(digits, 1), 21))) : Number(v.toFixed(digits));
   return (Object.is(r, -0) ? 0 : r).toString().replace('-', '−');
 }
 
-export const fmtPt = (p: Vec2, d = 4) => `(${fmt(p.x, d)}, ${fmt(p.y, d)})`;
+export const fmtPt = (p: Vec2, d = 4, sig = false) => `(${fmt(p.x, d, sig)}, ${fmt(p.y, d, sig)})`;

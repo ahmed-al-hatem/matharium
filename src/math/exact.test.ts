@@ -129,8 +129,11 @@ describe('engine exact display', () => {
     expect(one('Integral(x^2, 0, 1)', 'a').display).toBe('= 0.3333');
     expect(one('sin(pi/4)', 'a').exact).toBe('= √2/2');
     const r = evaluateAll([o('A = (1, 0)', 'A'), o('B = (0, 0)', 'B'), o('C = (0, 5)', 'C'), o('Angle(A, B, C)', 'al')]);
-    expect(r[3].display).toBe('= 90°');
-    expect(r[3].exact).toBe('= 90° = π/2');
+    // angles follow the angle unit: radians by default (exactly π/2), degrees on request
+    expect(r[3].display).toBe('= 1.5708 rad');
+    expect(r[3].exact).toBe('= π/2');
+    const d = evaluateAll([o('A = (1, 0)', 'A'), o('B = (0, 0)', 'B'), o('C = (0, 5)', 'C'), o('Angle(A, B, C)', 'al')], 4, {}, { angle: 'deg' });
+    expect(d[3].display).toBe('= 90°');
   });
   it('shows roots, extrema, intersections and points exactly', () => {
     const r = evaluateAll([o('f(x) = x^2 - 2'), o('Roots(f)', 'l1'), o('Extremum(x^3 - 6x)', 'l2'), o('Intersect(f, x)', 'l3'), o('Midpoint((0,0), (1,1))', 'M')]);

@@ -39,7 +39,7 @@ body {
   background-color: var(--bg-canvas);
   color: var(--text-equation);
   font-family: var(--font-ui-en), var(--font-ui-ar);
-  font-size: 14px;
+  font-size: calc(14px * var(--font-k, 1));
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -133,8 +133,8 @@ html[dir='rtl'] .drawer { animation-name: slide-rtl; }
 .vis-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--c); background: var(--c); transition: .15s; }
 .vis-dot.off { background: transparent; }
 .alg-body { flex: 1; min-width: 0; padding: 10px 12px; cursor: text; direction: ltr; text-align: left; }
-.alg-tex { font-size: 18px; color: var(--text-highlight); overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
-.alg-value { font-family: var(--font-math); color: var(--text-equation); font-size: 16px; margin-top: 2px; overflow-wrap: anywhere; }
+.alg-tex { font-size: calc(18px * var(--font-k, 1)); color: var(--text-highlight); overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.alg-value { font-family: var(--font-math); color: var(--text-equation); font-size: calc(16px * var(--font-k, 1)); margin-top: 2px; overflow-wrap: anywhere; }
 .alg-value .eq { color: var(--text-muted-axes); margin-inline-end: 6px; }
 .approx-btn { margin-inline-start: 8px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text-muted-axes); font-size: 14px; line-height: 20px; vertical-align: 1px; }
 .approx-btn:hover { color: var(--text-equation); }
@@ -266,11 +266,32 @@ html[dir='rtl'] .modal h2 { font-family: var(--font-ui-ar); }
 .check { display: flex; align-items: center; gap: 10px; padding: 7px 0; cursor: pointer; }
 .check input { accent-color: var(--accent-blue); width: 16px; height: 16px; }
 .form-row { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 8px; align-items: center; margin: 8px 0; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 12px; }
+.tabs button { padding: 8px 14px; border-bottom: 2px solid transparent; color: var(--text-muted-axes); font-weight: 500; margin-bottom: -1px; }
+.tabs button:hover { color: var(--text-highlight); }
+.tabs button.active { color: var(--text-ui-white); border-bottom-color: var(--accent-blue); }
+.tabs button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; border-radius: 6px 6px 0 0; }
+.tab-panel { min-height: 300px; }
+.settings-row { display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: center; margin: 8px 0; }
+.settings-row .pair { display: grid; grid-template-columns: 80px 1fr; gap: 8px; }
+.field:disabled { opacity: .55; cursor: not-allowed; }
+select.field { font-family: inherit; font-size: 13px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .help-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
 .help-grid code { font-family: var(--font-math); color: var(--text-highlight); font-size: 15px; direction: ltr; display: block; cursor: pointer; padding: 2px 0; }
 .help-grid code:hover { color: var(--accent-blue); }
 .help-grid span { font-size: 12.5px; color: var(--text-muted-axes); }
+
+/* ---------- input autocomplete ---------- */
+.ac-list { position: fixed; z-index: 90; background: var(--bg-raised); border: 1px solid var(--line-strong);
+  border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); overflow: hidden; }
+.ac-list ul { list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow: auto; }
+.ac-list li { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.ac-list li.on { background: var(--bg-hover); }
+.ac-list li code { font-family: var(--font-mono); font-size: 13px; color: var(--text-highlight); white-space: nowrap; unicode-bidi: isolate; }
+.ac-list li.on code { color: var(--accent-blue); }
+.ac-list li .muted { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-hint { font-size: 11px; color: var(--text-muted-axes); padding: 5px 12px 7px; border-top: 1px solid var(--line-strong); }
 
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
@@ -301,4 +322,5 @@ html[dir='rtl'] .modal h2 { font-family: var(--font-ui-ar); }
   .kb-body { flex-direction: column; gap: 4px; }
   .key { height: 34px; }
   .form-row { grid-template-columns: 80px 1fr 1fr; }
+  .settings-row { grid-template-columns: 1fr; gap: 4px; }
 }

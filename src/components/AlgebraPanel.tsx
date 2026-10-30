@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { beginLive, EXTRA_COLORS, freeName, PALETTE, useStore } from '../store/project';
+import { beginLive, EXTRA_COLORS, freeName, labelDefault, PALETTE, useStore } from '../store/project';
 import { useResolved } from '../store/resolved';
 import { evaluateAll, missingSymbols } from '../math/engine';
 import { splitDefinition } from '../math/parser';
@@ -77,6 +77,7 @@ function ItemMenu({ r, onClose }: { r: Resolved; onClose(): void }) {
     return () => document.removeEventListener('pointerdown', h);
   }, [onClose]);
   const [range, setRange] = useState(obj.slider ?? { min: -5, max: 5, step: 0.1 });
+  const labelled = obj.showLabel ?? labelDefault(st.settings, st.mode, r.value?.type === 'point' || r.value?.type === 'point3d');
   return (
     <div className="menu obj-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
       <div className="menu-item muted" style={{ fontSize: 12 }}>{t('color')}</div>
@@ -97,7 +98,7 @@ function ItemMenu({ r, onClose }: { r: Resolved; onClose(): void }) {
         </div>
       )}
       <hr />
-      <button onClick={() => st.patchObject(obj.id, { showLabel: !(obj.showLabel ?? st.settings.labels) })}><Icon.label />{t('showLabel')}{(obj.showLabel ?? st.settings.labels) ? ' ✓' : ''}</button>
+      <button onClick={() => st.patchObject(obj.id, { showLabel: !labelled })}><Icon.label />{t('showLabel')}{labelled ? ' ✓' : ''}</button>
       <button onClick={() => {
         const n = prompt(t('rename'), obj.name);
         if (n) st.renameObject(obj.id, n.trim());
@@ -150,7 +151,7 @@ function AlgebraItem({ r }: { r: Resolved }) {
       </div>
       <div className="alg-body">
         {editing ? (
-          <MathField value={draft} onChange={setDraft} onSubmit={submit} autoFocus
+          <MathField value={draft} onChange={setDraft} onSubmit={submit} autoFocus complete
             onCancel={() => st().setEditing(null)} onBlur={() => submit(draft)} ariaLabel={obj.name} />
         ) : (
           <Tex tex={r.tex} />
@@ -192,7 +193,7 @@ export function AlgebraPanel() {
     if (!missingSymbols(input, st.objects).length) {
       const def = splitDefinition(input);
       const name = def.name ?? freeName(st.objects, input);
-      const probe = evaluateAll([...st.objects.filter((o) => o.name !== def.name), { id: '__p', name, input, color: '', visible: true }]).find((x) => x.obj.id === '__p');
+      const probe = evaluateAll([...st.objects.filter((o) => o.name !== def.name), { id: '__p', name, input, color: '', visible: true }], 4, st.sheet, { angle: st.settings.angle }).find((x) => x.obj.id === '__p');
       if (probe?.error && !/dependency/i.test(probe.error)) { setErr(probe.error); return; }
     }
     st.addObject(input);
@@ -207,7 +208,7 @@ export function AlgebraPanel() {
       <div className="alg-input-row" ref={endRef}>
         <div className="alg-gutter"><Icon.plus /></div>
         <div style={{ flex: 1 }}>
-          <MathField value={draft} onChange={(v) => { setDraft(v); setErr(null); }} onSubmit={submit} placeholder={t('input')} autoFocus={items.length === 0} />
+          <MathField value={draft} onChange={(v) => { setDraft(v); setErr(null); }} onSubmit={submit} placeholder={t('input')} autoFocus={items.length === 0} complete />
           {err && <div className="alg-error" style={{ padding: '0 14px 10px' }}>{err}</div>}
         </div>
       </div>

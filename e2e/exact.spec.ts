@@ -1,4 +1,4 @@
-import { addInput, expect, inputOf, open, state, test } from './helpers';
+import { addInput, expect, inputOf, open, openSettings, setLanguage, state, test } from './helpers';
 
 test.beforeEach(async ({ page }) => open(page));
 
@@ -25,7 +25,7 @@ test('integrals, trig values and right angles are exact; plain decimals have no 
   await addInput(page, 'sin(pi/4)');
   await expect(value(page).locator('span')).toHaveText('= √2/2');
   for (const s of ['A = (1, 0)', 'B = (0, 0)', 'C = (0, 2)', 'Angle(A, B, C)']) await addInput(page, s);
-  await expect(value(page).locator('span')).toHaveText('= 90° = π/2');
+  await expect(value(page).locator('span')).toHaveText('= π/2'); // radians by default
   await addInput(page, '0.123456789 * 2');
   await expect(value(page).locator('span')).toHaveText('= 0.2469');
   await expect(value(page).getByRole('button')).toHaveCount(0);
@@ -33,9 +33,9 @@ test('integrals, trig values and right angles are exact; plain decimals have no 
 
 test('the Exact values setting sets the default for every row', async ({ page }) => {
   await addInput(page, 'Integral(x^2, 0, 1)');
-  await page.getByRole('button', { name: 'Settings' }).first().click();
+  await openSettings(page, 'General');
   await page.getByLabel('Exact values (fractions, √, π)').uncheck();
-  await page.locator('.modal .pill-btn').click();
+  await page.keyboard.press('Escape');
   await expect(value(page).locator('span')).toHaveText('= 0.3333');
   await value(page).getByRole('button', { name: 'Show exact value' }).click();
   await expect(value(page).locator('span')).toHaveText('= 1/3');
@@ -57,7 +57,7 @@ test('Factor from the keyboard shows the factored form and plots a function', as
 });
 
 test('Arabic labels the ≈ button', async ({ page }) => {
-  await page.locator('.topbar .pill-btn').click();
+  await setLanguage(page, 'ar');
   await addInput(page, 'Integral(x^2, 0, 1)');
   await value(page).getByRole('button', { name: 'عرض القيمة العشرية' }).click();
   await expect(value(page).locator('span')).toHaveText('= 0.3333');
