@@ -24,7 +24,36 @@ export interface MObj {
   trace?: boolean;
   /** Value line shown as a decimal (true) or exact (false); unset follows Settings.exact. */
   approx?: boolean;
+  /** Text shown as the label when labelMode is 'caption'. */
+  caption?: string;
+  /** What the label says; unset is the name. */
+  labelMode?: LabelText;
+  /** Hidden from the algebra list (unless Settings.showAux). */
+  auxiliary?: boolean;
+  /** Fill opacity 0–1 of shaded objects (circles, polygons, regions, surfaces); unset keeps each type's default. */
+  opacity?: number;
+  lineStyle?: LineStyle;
+  pointStyle?: PointStyle;
+  /** Point radius in pixels; unset is 5 for free points and 4.2 for others. */
+  pointSize?: number;
+  /** How a line's equation is written; unset is explicit (y = mx + b). */
+  eqForm?: EqForm;
+  /** Rounding for this object's value line; unset follows Settings.digits. */
+  digits?: number;
+  /** Condition such as `a > 2`; the object is drawn only while it is true. */
+  showIf?: string;
+  /** Drawing layer 0–9; higher layers are drawn on top. */
+  layer?: number;
 }
+
+export const LABEL_TEXTS = ['name', 'nameValue', 'value', 'caption'] as const;
+export type LabelText = (typeof LABEL_TEXTS)[number];
+export const LINE_STYLES = ['solid', 'dashed', 'dotted'] as const;
+export type LineStyle = (typeof LINE_STYLES)[number];
+export const POINT_STYLES = ['dot', 'ring', 'cross', 'square', 'diamond'] as const;
+export type PointStyle = (typeof POINT_STYLES)[number];
+export const EQ_FORMS = ['implicit', 'explicit', 'parametric'] as const;
+export type EqForm = (typeof EQ_FORMS)[number];
 
 /** How an animated slider moves: back and forth, increasing and wrapping around, or once up to max. */
 export type AnimMode = 'oscillate' | 'increase' | 'once';
@@ -82,6 +111,36 @@ export interface Resolved {
   stepsOpen?: boolean;
   /** symbols that were undefined (used to auto-create sliders) */
   missing?: string[];
+  /** obj.showIf is false right now */
+  hidden?: boolean;
+  /** obj.showIf could not be evaluated (the object stays shown) */
+  showIfError?: string;
+}
+
+/** Whether an object is drawn: visible and its show-if condition holds. */
+export const shown = (r: Resolved) => r.obj.visible && !r.hidden;
+
+/** The text of an object's label on the graph. */
+export function labelText(r: Resolved): string {
+  const { obj } = r;
+  const v = r.value, n = (x: number) => String(+x.toFixed(4));
+  // free points, sliders and functions have no value line of their own: use their coordinates, number or definition
+  const value = r.display?.replace(/^=\s*/, '')
+    ?? (v?.type === 'point' ? `(${n(v.p.x)}, ${n(v.p.y)})` : v?.type === 'number' ? n(v.value)
+      : obj.input.replace(/^\s*[A-Za-z]\w*(\([^)]*\))?\s*=\s*/, ''));
+  switch (obj.labelMode) {
+    case 'caption': return obj.caption || obj.name;
+    case 'value': return value || obj.name;
+    // an equation already has its own "=": g: y = 2x + 1
+    case 'nameValue': {
+      if (!value) return obj.name;
+      if (value.includes('=')) return `${obj.name}: ${value}`;
+      // a function reads f(x) = …
+      const head = v?.type === 'function' ? /^\s*([A-Za-z]\w*\([^)]*\))\s*=/.exec(obj.input)?.[1] ?? `${obj.name}(${v.param})` : obj.name;
+      return `${head} = ${value}`;
+    }
+    default: return obj.name;
+  }
 }
 
 export const is3DOnly = (v?: Value) =>

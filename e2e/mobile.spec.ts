@@ -93,3 +93,27 @@ test('phone keyboard: space on every tab, no arrows outside 123, normal-size Ent
   await key('Enter').tap();
   await expect(page.locator('.alg-item')).toHaveCount(1);
 });
+
+test('phone: a long press on an algebra row opens the object menu and its properties', async ({ page }) => {
+  await open(page);
+  await addInput(page, 'f(x) = x^2');
+  await page.keyboard.press('Escape');
+  const row = (await page.locator('.alg-item').first().boundingBox())!;
+  const x = row.x + row.width / 2, y = row.y + row.height / 2;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  await page.waitForTimeout(650);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.getByRole('menuitem', { name: 'Settings…' }).tap();
+  const panel = page.getByRole('dialog', { name: 'Object properties' });
+  await expect(panel).toBeVisible();
+  // a sheet that fits the phone
+  const box = (await panel.boundingBox())!;
+  const iw = await page.evaluate(() => innerWidth);
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(iw + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(iw);
+  await panel.getByRole('tab', { name: 'Style' }).tap();
+  await panel.getByRole('radio', { name: 'Dotted' }).tap();
+  expect(await page.evaluate(() => (window as any).__matharium.getState().objects[0].lineStyle)).toBe('dotted');
+});

@@ -1,5 +1,5 @@
 import { evaluateAll } from '../math/engine';
-import type { Fn1, Value, Vec3 } from '../math/types';
+import { shown, type Fn1, type Value, type Vec3 } from '../math/types';
 import { migrateSettings, type ProjectFile, type Settings } from '../store/project';
 import { draw } from './renderer';
 
@@ -17,7 +17,7 @@ export function drawThumb(canvas: HTMLCanvasElement, p: ProjectFile) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const items = evaluateAll(p.objects ?? []);
   const settings: Settings = { ...migrateSettings(p.settings as Record<string, unknown> | undefined), digits: 2, lang: 'en' };
-  if (p.mode === '3d') { drawThumb3d(ctx, items.map((r) => (r.obj.visible ? { v: r.value, color: r.obj.color } : null)), W, H, settings.range3d); return; }
+  if (p.mode === '3d') { drawThumb3d(ctx, items.map((r) => (shown(r) ? { v: r.value, color: r.obj.color } : null)), W, H, settings.range3d); return; }
   const k = W / DESIGN_W;
   const view = { ...p.view, sx: p.view.sx * k * 1.6, sy: p.view.sy * k * 1.6 };
   draw(ctx, items, { W, H, view, settings: { ...settings, labels: 'none' }, selectedId: null, htmlText: true });

@@ -65,7 +65,7 @@ export function SettingsDialog({ tab }: { tab: SettingsTab }) {
   );
 }
 
-function Check({ k, label }: { k: 'grid' | 'axes' | 'snap' | 'axes3d' | 'plane3d' | 'grid3d' | 'exact'; label: string }) {
+function Check({ k, label }: { k: 'grid' | 'axes' | 'snap' | 'axes3d' | 'plane3d' | 'grid3d' | 'exact' | 'showAux'; label: string }) {
   const t = useT();
   const v = useStore((x) => x.settings[k]);
   return <label className="check"><input type="checkbox" checked={v} onChange={(e) => useStore.getState().setSettings({ [k]: e.target.checked })} />{t(label)}</label>;
@@ -82,6 +82,7 @@ function GeneralTab() {
   return (
     <>
       <Check k="exact" label="exact" />
+      <Check k="showAux" label="showAux" />
       <Field label={t('language')}>
         <select className="field" value={s.lang} onChange={(e) => set({ lang: e.target.value as 'en' | 'ar' })}>
           <option value="en">English</option><option value="ar">العربية</option>
