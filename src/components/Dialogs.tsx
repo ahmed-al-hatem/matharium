@@ -3,6 +3,7 @@ import { useStore } from '../store/project';
 import { useT } from '../i18n/i18n';
 import { Viewport } from '../graph2d/viewport';
 import { Icon } from './Icons';
+import { helpRows, type HelpGroup } from '../math/commands';
 
 function Modal({ title, onClose, children }: { title: string; onClose(): void; children: React.ReactNode }) {
   useEffect(() => {
@@ -76,51 +77,56 @@ export function SettingsDialog() {
   );
 }
 
-const HELP: { key: string; rows: [string, string][] }[] = [
-  { key: 'help.functions', rows: [
-    ['f(x) = x^3 - 3x', 'function'], ['y = 2x + 1', 'explicit line'], ['x^2 + y^2 = 9', 'implicit curve'],
-    ['y < sin(x)', 'inequality region'], ['a x^2 + b', 'auto-creates sliders a, b'], ["f'(x)", 'derivative of f'],
-    ['g(x) = x < 0 ? -x : x^2', 'piecewise'], ['{(1,2), (3,5), (4,1)}', 'list of points'],
-  ] },
-  { key: 'help.commands', rows: [
-    ['Solve(x^2 - 2x = 3)', 'solve equation'], ['Solve(x + y = 3, x - y = 1)', 'solve system'],
-    ['Roots(f)', 'zeros'], ['Extremum(f)', 'max / min'], ['Intersect(f, g)', 'intersection points'],
-    ['Derivative(f)', 'symbolic derivative'], ['Integral(f, 0, 2)', 'definite integral (shaded)'],
-    ['Tangent(1, f)', 'tangent line at x = 1'], ['Simplify(x(x+1) - x)', 'simplify'], ['Expand((x+1)^3)', 'expand'],
-  ] },
-  { key: 'help.geometry', rows: [
-    ['A = (1, 2)', 'free point (drag it)'], ['Segment(A, B)', 'segment'], ['Circle(A, 3)', 'circle'],
-    ['Polygon(A, B, C)', 'polygon & area'], ['Midpoint(A, B)', 'midpoint'], ['Angle(A, B, C)', 'angle at B'],
-    ['Perpendicular(A, l)', 'perpendicular line'], ['Rotate(A, 90°, B)', 'rotation'],
-  ] },
-  { key: 'help.3d', rows: [
-    ['z = x^2 - y^2', 'surface'], ['x^2 + y^2 + z^2 = 4', 'implicit surface'], ['(1, 2, 3)', '3D point'],
-    ['Curve(cos(t), sin(t), t/4, t, 0, 4pi)', 'space curve'], ['Sphere((0,0,0), 2)', 'sphere'],
-    ['Surface(u, v, u v, u, -2, 2, v, -2, 2)', 'parametric surface'],
-  ] },
-  { key: 'help.keys', rows: [
-    ['Ctrl+Z / Ctrl+Y', 'undo / redo'], ['Ctrl+S / Ctrl+Shift+S', 'save / save as'], ['Ctrl+O', 'open'],
-    ['Delete', 'delete selected object'], ['Esc', 'back to Move tool'], ['Wheel / pinch', 'zoom'],
-  ] },
+type Row = { code: string; desc: string; sig?: string };
+const row = (code: string, en: string, ar: string) => ({ code, en, ar });
+
+/** Rows that are not commands (input forms and shortcuts); the command rows come from the command table. */
+const EXTRA: Partial<Record<string, { code: string; en: string; ar: string }[]>> = {
+  'help.functions': [
+    row('f(x) = x^3 - 3x', 'function', 'دالة'), row('y = 2x + 1', 'explicit line', 'مستقيم صريح'), row('x^2 + y^2 = 9', 'implicit curve', 'منحنى ضمني'),
+    row('y < sin(x)', 'inequality region', 'منطقة متباينة'), row('a x^2 + b', 'auto-creates sliders a, b', 'ينشئ المنزلقين a و b تلقائيًا'),
+    row("f'(x)", 'derivative of f', 'مشتقة f'), row('g(x) = x < 0 ? -x : x^2', 'piecewise', 'دالة متعددة التعريف'),
+    row('{(1,2), (3,5), (4,1)}', 'list of points', 'قائمة نقاط'), row('l = {2, 4, 4, 5, 7}', 'list of numbers', 'قائمة أعداد'),
+  ],
+  'help.geometry': [row('A = (1, 2)', 'free point (drag it)', 'نقطة حرة (اسحبها)')],
+  'help.3d': [row('z = x^2 - y^2', 'surface', 'سطح'), row('x^2 + y^2 + z^2 = 4', 'implicit surface', 'سطح ضمني'), row('(1, 2, 3)', '3D point', 'نقطة ثلاثية الأبعاد')],
+  'help.keys': [
+    row('Ctrl+Z / Ctrl+Y', 'undo / redo', 'تراجع / إعادة'), row('Ctrl+S / Ctrl+Shift+S', 'save / save as', 'حفظ / حفظ باسم'), row('Ctrl+O', 'open', 'فتح'),
+    row('Delete', 'delete selected object', 'حذف الكائن المحدد'), row('Esc', 'back to Move tool', 'العودة إلى أداة التحريك'), row('Wheel / pinch', 'zoom', 'تكبير وتصغير'),
+    row('Tab / Enter', 'insert a suggested command', 'إدراج الأمر المقترح'),
+  ],
+};
+
+const GROUPS: { key: string; table?: HelpGroup }[] = [
+  { key: 'help.functions' }, { key: 'help.commands', table: 'commands' }, { key: 'help.calculus', table: 'calculus' },
+  { key: 'help.geometry', table: 'geometry' }, { key: 'help.stats', table: 'stats' }, { key: 'help.3d', table: '3d' }, { key: 'help.keys' },
 ];
+
+export function helpContent(lang: 'en' | 'ar'): { key: string; rows: Row[] }[] {
+  return GROUPS.map((g) => ({
+    key: g.key,
+    rows: [...(EXTRA[g.key] ?? []).map((r) => ({ code: r.code, desc: r[lang] })), ...(g.table ? helpRows(g.table, lang) : [])],
+  }));
+}
 
 export function HelpDialog({ onClose }: { onClose(): void }) {
   const t = useT();
-  const add = (s: string) => {
-    if (s.startsWith('Ctrl') || s.startsWith('Wheel') || ['Delete', 'Esc'].includes(s)) return;
+  const lang = useStore((s) => s.settings.lang);
+  const add = (group: string, s: string) => {
+    if (group === 'help.keys') return;
     const st = useStore.getState();
-    if (/Sphere|Curve\(cos|Surface|z =|z\^2|, 3\)$/.test(s) && st.mode !== '3d') st.setMode('3d');
+    if (group === 'help.3d' && st.mode !== '3d') st.setMode('3d');
     st.addObject(s);
     onClose();
   };
   return (
     <Modal title={t('help.title')} onClose={onClose}>
-      {HELP.map((g) => (
+      {helpContent(lang).map((g) => (
         <div key={g.key}>
           <h3>{t(g.key)}</h3>
           <div className="help-grid">
-            {g.rows.map(([code, desc]) => (
-              <div key={code}><code onClick={() => add(code)}>{code}</code><span>{desc}</span></div>
+            {g.rows.map(({ code, desc, sig }) => (
+              <div key={code}><code onClick={() => add(g.key, code)} title={sig}>{code}</code><span>{desc}</span></div>
             ))}
           </div>
         </div>

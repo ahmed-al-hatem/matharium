@@ -9,7 +9,7 @@ export const EXTRA_COLORS = ['#DCDCDC', '#B07CE8', '#E87CB0', '#8FCB5A'];
 export type Mode = 'graphing' | 'geometry' | '3d';
 export type Panel = 'algebra' | 'tools' | 'table' | 'spreadsheet';
 export type ToolId =
-  | 'move' | 'point' | 'segment' | 'line' | 'ray' | 'vector' | 'polygon' | 'circle' | 'circle3'
+  | 'move' | 'point' | 'pointOn' | 'segment' | 'line' | 'ray' | 'vector' | 'polygon' | 'circle' | 'circle3'
   | 'midpoint' | 'perpendicular' | 'parallel' | 'bisector' | 'intersect' | 'tangent'
   | 'distance' | 'angle' | 'slider' | 'delete';
 

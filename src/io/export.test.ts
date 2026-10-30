@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { evaluateAll, evaluateScope } from '../math/engine';
 import { draw } from '../graph2d/renderer';
 import { SvgCtx } from '../graph2d/svgctx';
-import { evalSheet } from '../components/SpreadsheetPanel';
+import { evalSheet } from '../math/sheet';
 import type { MObj } from '../math/types';
 
 const objs: MObj[] = [

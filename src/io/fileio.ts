@@ -133,7 +133,7 @@ const csvCell = (v: string | number) => (/[",\n]/.test(String(v)) ? `"${String(v
 
 export function tableRows(): (string | number)[][] {
   const st = useStore.getState();
-  const res = evaluateAll(st.objects, st.settings.digits);
+  const res = evaluateAll(st.objects, st.settings.digits, st.sheet);
   const fns = res.filter((r) => st.table.ids.includes(r.obj.id) && r.value?.type === 'function');
   const { start, end, step } = st.table;
   const rows: (string | number)[][] = [['x', ...fns.map((r) => `${r.obj.name}(x)`)]];

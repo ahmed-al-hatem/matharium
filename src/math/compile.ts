@@ -90,8 +90,16 @@ export function isKnownName(name: string, scope: Scope) {
 export function parseExpr(src: string, scope: Scope = {}, vars: string[] = ['x', 'y', 'z', 't']): MathNode {
   const pre = src.replace(/([A-Za-z]\w*)('+)\s*\(/g, (_m, n: string, q: string) => `${n}_d${q.length}(`);
   const node = math.parse(pre);
-  return node.transform((n: MathNode, path: string) => {
+  const fix = (n: MathNode, path: string): MathNode => {
     if (path === 'fn') return n;
+    // x(x + 1) is a product, not a call, unless x is a user function
+    if ((n as any).isFunctionNode && (n as any).args.length === 1) {
+      const name = (n as any).fn.name as string;
+      if (vars.includes(name) && typeof scope[name] !== 'function') {
+        const arg = (n as any).args[0].transform(fix) as MathNode;
+        return new math.OperatorNode('*', 'multiply', [new math.SymbolNode(name) as MathNode, new math.ParenthesisNode(arg) as MathNode]) as MathNode;
+      }
+    }
     if ((n as any).isSymbolNode) {
       const name = (n as any).name as string;
       if (!isKnownName(name, scope) && name.length > 1 && [...name].every((ch) => vars.includes(ch))) {
@@ -100,7 +108,8 @@ export function parseExpr(src: string, scope: Scope = {}, vars: string[] = ['x',
       }
     }
     return n;
-  });
+  };
+  return node.transform(fix);
 }
 
 function gen(node: any, params: string[], scope: Scope): string {

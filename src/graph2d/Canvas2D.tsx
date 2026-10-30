@@ -3,6 +3,7 @@ import { beginLive, useStore, type ToolId } from '../store/project';
 import { useResolved } from '../store/resolved';
 import { splitDefinition } from '../math/parser';
 import { fmtPt } from '../math/solve';
+import { canHostPoint, paramOf, pointAt } from '../math/geometry';
 import type { Resolved, Value, Vec2 } from '../math/types';
 import { draw, type Overlay } from './renderer';
 import { SvgCtx } from './svgctx';
@@ -19,6 +20,7 @@ const isCurve = (v: Value) => v.type !== 'point' && v.type !== 'number' && v.typ
 
 export const TOOL_SPECS: Partial<Record<ToolId, ToolSpec>> = {
   point: { needs: ['pt'] },
+  pointOn: { needs: ['obj'] },
   segment: { needs: ['pt', 'pt'], make: ([a, b]) => `Segment(${a}, ${b})`, shape: 'segment' },
   line: { needs: ['pt', 'pt'], make: ([a, b]) => `Line(${a}, ${b})`, shape: 'line' },
   ray: { needs: ['pt', 'pt'], make: ([a, b]) => `Ray(${a}, ${b})`, shape: 'ray' },
@@ -37,6 +39,7 @@ export const TOOL_SPECS: Partial<Record<ToolId, ToolSpec>> = {
 };
 
 const nameOf = (r: Resolved) => splitDefinition(r.obj.input).name ?? r.obj.name;
+const draggable = (v?: Value) => v?.type === 'point' && (v.free || !!v.on);
 
 export function Canvas2D() {
   const wrap = useRef<HTMLDivElement>(null);
@@ -139,6 +142,15 @@ export function Canvas2D() {
       st.setPanel('algebra');
       return;
     }
+    if (tool === 'pointOn') {
+      const hit = hitTest(items, vp, px, py, canHostPoint);
+      if (!hit?.value) { st.notify('pickObject'); return; }
+      const t = +paramOf(hit.value, { x: vp.wx(px), y: vp.wy(py) }).toFixed(6);
+      const name = st.addObject(`Point(${nameOf(hit)}, ${t})`);
+      const created = store().objects.find((o) => o.name === name);
+      if (created) st.select(created.id);
+      return;
+    }
     if (!spec) return;
     if (spec.needs === 'poly') {
       const first = pending[0];
@@ -182,7 +194,7 @@ export function Canvas2D() {
     }
     if (tool !== 'move') { toolClick(px, py); return; }
     const hit = hitTest(items, vp, px, py);
-    if (hit?.value?.type === 'point' && hit.value.free) {
+    if (hit && draggable(hit.value)) {
       beginLive();
       drag.current = { kind: 'point', id: hit.obj.id, sx: px, sy: py, view, moved: false };
       store().select(hit.obj.id);
@@ -212,8 +224,18 @@ export function Canvas2D() {
       } else if (d.id) {
         const o = store().objects.find((x) => x.id === d.id);
         if (!o) return;
-        const p = snapW(w);
         const named = splitDefinition(o.input).name;
+        const pv = items.find((r) => r.obj.id === o.id)?.value;
+        if (pv?.type === 'point' && pv.on) {
+          // a point on an object slides along it: keep the object, store the nearest parameter
+          const t = +paramOf(pv.on.target, w).toFixed(6);
+          const q = pointAt(pv.on.target, t);
+          if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) return;
+          store().liveUpdate(o.id, { input: `${named ? `${named} = ` : ''}Point(${pv.on.src}, ${t})` });
+          setHover({ p: q, color: o.color, text: `${o.name} ${fmtPt(q, 2)}` });
+          return;
+        }
+        const p = snapW(w);
         store().liveUpdate(o.id, { input: `${named ? `${named} = ` : ''}(${p.x}, ${p.y})` });
         setHover({ p, color: o.color, text: `${o.name} ${fmtPt(p, 2)}` });
       }
@@ -232,7 +254,7 @@ export function Canvas2D() {
         setHover({ p, color: hit.obj.color, text: fmtPt(p, 4) });
       }
     } else if (hover) setHover(null);
-    canvas.current!.style.cursor = tool !== 'move' ? 'crosshair' : hit?.value?.type === 'point' && hit.value.free ? 'grab' : 'default';
+    canvas.current!.style.cursor = tool !== 'move' ? 'crosshair' : draggable(hit?.value) ? 'grab' : 'default';
   }
 
   function onPointerUp(e: React.PointerEvent) {

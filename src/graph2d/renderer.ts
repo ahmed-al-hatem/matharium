@@ -1,6 +1,7 @@
 import type { Resolved, Value, Vec2 } from '../math/types';
 import type { Settings, View } from '../store/project';
 import { fmt } from '../math/solve';
+import { riemannStrip } from '../math/calculus';
 import { march } from './march';
 import { fmtTick, niceStep, Viewport } from './viewport';
 
@@ -265,6 +266,100 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
       labels.push({ p: { x: mx, y: v.f(mx) / 2 }, text: `${name} = ${fmt(v.value, 3)}`, color });
       return;
     }
+    case 'riemann': {
+      const h = (v.b - v.a) / v.n;
+      const cy = (y: number) => Math.max(-10, Math.min(vp.H + 10, vp.py(y)));
+      const y0 = cy(0);
+      ctx.beginPath();
+      for (let i = 0; i < v.n; i++) {
+        const x0 = vp.px(v.a + i * h), x1 = vp.px(v.a + (i + 1) * h);
+        if (Math.max(x0, x1) < 0 || Math.min(x0, x1) > vp.W) continue;
+        const [ya, yb] = riemannStrip(v.f, v.a, h, i, v.rule);
+        if (!Number.isFinite(ya) || !Number.isFinite(yb)) continue;
+        ctx.moveTo(x0, y0); ctx.lineTo(x0, cy(ya)); ctx.lineTo(x1, cy(yb)); ctx.lineTo(x1, y0); ctx.closePath();
+      }
+      ctx.globalAlpha = 0.22; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.lineWidth = 1; ctx.stroke(); ctx.lineWidth = width;
+      plotFn(ctx, v.f, vp, vp.px(Math.min(v.a, v.b)), vp.px(Math.max(v.a, v.b)));
+      const mx = (v.a + v.b) / 2;
+      labels.push({ p: { x: mx, y: v.f(mx) / 2 }, text: `${name} = ${fmt(v.value, 4)}`, color });
+      return;
+    }
+    case 'between': {
+      const a = vp.px(Math.min(v.a, v.b)), b = vp.px(Math.max(v.a, v.b));
+      const cy = (y: number) => Math.max(-10, Math.min(vp.H + 10, vp.py(y)));
+      ctx.globalAlpha = 0.28;
+      for (let px = Math.max(0, a); px < Math.min(vp.W, b); px += 1) {
+        const x = vp.wx(px + 0.5), y1 = v.f(x), y2 = v.g(x);
+        if (!Number.isFinite(y1) || !Number.isFinite(y2)) continue;
+        ctx.fillRect(px, Math.min(cy(y1), cy(y2)), 1, Math.abs(cy(y1) - cy(y2)));
+      }
+      ctx.globalAlpha = 1;
+      plotFn(ctx, v.f, vp, a, b);
+      plotFn(ctx, v.g, vp, a, b);
+      const mx = (v.a + v.b) / 2;
+      labels.push({ p: { x: mx, y: (v.f(mx) + v.g(mx)) / 2 }, text: `${name} = ${fmt(v.value, 3)}`, color });
+      return;
+    }
+    case 'slopefield': {
+      const gap = 30, half = 10;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let py = gap / 2; py < vp.H; py += gap) for (let px = gap / 2; px < vp.W; px += gap) {
+        const m = v.F(vp.wx(px), vp.wy(py));
+        if (Number.isNaN(m)) continue;
+        // direction (1, m) in world units, then to screen
+        let dx = vp.v.sx, dy = Number.isFinite(m) ? -m * vp.v.sy : -vp.v.sy * 1e9 * Math.sign(m);
+        const L = Math.hypot(dx, dy);
+        dx = (dx / L) * half; dy = (dy / L) * half;
+        ctx.moveTo(px - dx, py - dy); ctx.lineTo(px + dx, py + dy);
+      }
+      ctx.stroke();
+      return;
+    }
+    case 'bars': {
+      const cy = (y: number) => Math.max(-10, Math.min(vp.H + 10, vp.py(y)));
+      const y0 = cy(0);
+      for (const hi of [false, true]) {
+        ctx.beginPath();
+        for (const b of v.bars) {
+          if (!!b.hi !== hi) continue;
+          const x0 = vp.px(b.x0), x1 = vp.px(b.x1);
+          ctx.moveTo(x0, y0); ctx.lineTo(x0, cy(b.h)); ctx.lineTo(x1, cy(b.h)); ctx.lineTo(x1, y0); ctx.closePath();
+        }
+        ctx.globalAlpha = hi ? 0.6 : 0.22; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.lineWidth = 1.2; ctx.stroke();
+      }
+      const top = v.bars.filter((b) => b.hi);
+      if (v.value !== undefined && top.length) {
+        labels.push({ p: { x: top[0].x0, y: Math.max(...top.map((b) => b.h)) }, text: `${name} = ${fmt(v.value, 4)}`, color });
+      }
+      return;
+    }
+    case 'boxplot': {
+      const [mn, q1, md, q3, mx] = v.s.map((x) => vp.px(x));
+      const yc = vp.py(v.y), hh = Math.min(30, 0.4 * vp.v.sy);
+      ctx.beginPath();
+      ctx.moveTo(q1, yc - hh); ctx.lineTo(q3, yc - hh); ctx.lineTo(q3, yc + hh); ctx.lineTo(q1, yc + hh); ctx.closePath();
+      ctx.globalAlpha = 0.22; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.moveTo(md, yc - hh); ctx.lineTo(md, yc + hh);
+      ctx.moveTo(mn, yc); ctx.lineTo(q1, yc); ctx.moveTo(q3, yc); ctx.lineTo(mx, yc);
+      ctx.moveTo(mn, yc - hh / 2); ctx.lineTo(mn, yc + hh / 2); ctx.moveTo(mx, yc - hh / 2); ctx.lineTo(mx, yc + hh / 2);
+      ctx.stroke();
+      return;
+    }
+    case 'polyline': {
+      ctx.beginPath();
+      let pen = false;
+      for (const p of v.pts) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) { pen = false; continue; }
+        const x = Math.max(-1e4, Math.min(vp.W + 1e4, vp.px(p.x))), y = Math.max(-1e4, Math.min(vp.H + 1e4, vp.py(p.y)));
+        if (pen) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        pen = true;
+      }
+      ctx.stroke();
+      break;
+    }
     case 'curve': {
       ctx.beginPath();
       let pen = false;
@@ -319,7 +414,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
     const selected = o.selectedId === obj.id;
     const width = (obj.lineWidth ?? 2.5) + (selected ? 1 : 0);
     const showLabel = obj.showLabel ?? o.settings.labels;
-    if (v.type === 'point') { points.push({ p: v.p, color: obj.color, name: obj.name, free: v.free, selected, label: showLabel }); continue; }
+    if (v.type === 'point') { points.push({ p: v.p, color: obj.color, name: obj.name, free: v.free || !!v.on, selected, label: showLabel }); continue; }
     if (v.type === 'points') { v.pts.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, label: false })); continue; }
     if (v.type === 'text') { v.pts?.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, hollow: true, label: false })); continue; }
     if (selected) {

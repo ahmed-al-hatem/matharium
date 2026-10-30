@@ -147,7 +147,7 @@ function AlgebraItem({ r }: { r: Resolved }) {
       </div>
       <div className="alg-body">
         {editing ? (
-          <MathField value={draft} onChange={setDraft} onSubmit={submit} autoFocus
+          <MathField value={draft} onChange={setDraft} onSubmit={submit} autoFocus complete
             onCancel={() => st().setEditing(null)} onBlur={() => submit(draft)} ariaLabel={obj.name} />
         ) : (
           <Tex tex={r.tex} />
@@ -180,7 +180,7 @@ export function AlgebraPanel() {
     if (!missingSymbols(input, st.objects).length) {
       const def = splitDefinition(input);
       const name = def.name ?? freeName(st.objects, input);
-      const probe = evaluateAll([...st.objects.filter((o) => o.name !== def.name), { id: '__p', name, input, color: '', visible: true }]).find((x) => x.obj.id === '__p');
+      const probe = evaluateAll([...st.objects.filter((o) => o.name !== def.name), { id: '__p', name, input, color: '', visible: true }], 4, st.sheet).find((x) => x.obj.id === '__p');
       if (probe?.error && !/dependency/i.test(probe.error)) { setErr(probe.error); return; }
     }
     st.addObject(input);
@@ -195,7 +195,7 @@ export function AlgebraPanel() {
       <div className="alg-input-row" ref={endRef}>
         <div className="alg-gutter"><Icon.plus /></div>
         <div style={{ flex: 1 }}>
-          <MathField value={draft} onChange={(v) => { setDraft(v); setErr(null); }} onSubmit={submit} placeholder={t('input')} autoFocus={items.length === 0} />
+          <MathField value={draft} onChange={(v) => { setDraft(v); setErr(null); }} onSubmit={submit} placeholder={t('input')} autoFocus={items.length === 0} complete />
           {err && <div className="alg-error" style={{ padding: '0 14px 10px' }}>{err}</div>}
         </div>
       </div>

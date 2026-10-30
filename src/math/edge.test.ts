@@ -48,7 +48,10 @@ describe('engine never throws on odd input', () => {
 });
 
 describe('renderer is robust at extreme views', () => {
-  const objs = [o('tan(x)', 'f'), o('1/x', 'g'), o('x^2 + y^2 = 0', 'eq1'), o('y > sin(x)', 'h'), o('A = (1, 2)', 'A'), o('Circle(A, 3)', 'c'), o('Integral(sin(x), 0, 3)', 'a')];
+  const objs = [o('tan(x)', 'f'), o('1/x', 'g'), o('x^2 + y^2 = 0', 'eq1'), o('y > sin(x)', 'h'), o('A = (1, 2)', 'A'), o('Circle(A, 3)', 'c'), o('Integral(sin(x), 0, 3)', 'a'),
+    o('RiemannSum(x^2, -1, 2, 30, "trap")', 'b'), o('IntegralBetween(x, x^2, 0, 1)', 'd'), o('SlopeField(x - y)', 's'), o('SolveODE(y, (0, 1))', 'u'),
+    o('Histogram({1, 2, 2, 3, 7}, 1)', 'l1'), o('BoxPlot({1, 2, 2, 3, 7})', 'l2'), o('Binomial(8, 0.3, 2, 4)', 'l3'), o('Normal(0, 1, -1, 2)', 'n'),
+    o('P = Point(c, 0.3)', 'P'), o('Q = Midpoint(P, A)', 'Q'), o('Locus(Q, P)', 'k')];
   const views: View[] = [
     { ox: 0, oy: 0, sx: 1e-4, sy: 1e-4 },
     { ox: 0, oy: 0, sx: 1e6, sy: 1e6 },
