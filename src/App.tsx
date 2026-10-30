@@ -11,6 +11,7 @@ import { MathKeyboard } from './components/MathKeyboard';
 import { HelpDialog, SettingsDialog } from './components/Dialogs';
 import { TemplatesDialog } from './components/TemplatesDialog';
 import { Worksheet } from './components/Worksheet';
+import { ContextMenuHost } from './components/ContextMenu';
 import { Icon } from './components/Icons';
 import { openProject, saveProject } from './io/fileio';
 import { applyUpdate } from './io/pwa';
@@ -115,6 +116,7 @@ export default function App() {
       </div>
       {keyboardOpen && <MathKeyboard />}
       {settingsTab && <SettingsDialog tab={settingsTab} />}
+      <ContextMenuHost />
       {help && <HelpDialog onClose={() => setHelp(false)} />}
       {templates && <TemplatesDialog onClose={() => setTemplates(false)} />}
       {worksheet && <Worksheet onClose={() => setWorksheet(false)} />}

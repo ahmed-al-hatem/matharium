@@ -69,7 +69,7 @@ test('Arabic text with LaTeX, pen and arrow are objects that survive save and op
   // they are ordinary objects: recolor the stroke from its menu, delete the arrow with the Delete tool
   await showPanel(page, 'Algebra');
   await page.locator('.alg-item').nth(1).locator('.alg-actions button').click();
-  await page.locator('.obj-menu .swatch[aria-label="#6DC4AA"]').click();
+  await page.locator('.ctx-menu .swatch[aria-label="#6DC4AA"]').click();
   await page.keyboard.press('Escape');
   await tool(page, 'Delete');
   await clickWorld(page, 2.5, -2);
@@ -103,7 +103,7 @@ test('text pinned to the screen stays put while text on the graph pans with it',
   const onGraph = page.locator('.text-label', { hasText: 'graph' });
   const before = (await fixed.boundingBox())!;
   await page.locator('.alg-item').nth(1).locator('.alg-actions button').click();
-  await page.locator('.obj-menu button', { hasText: 'Pin to screen' }).click();
+  await page.locator('.ctx-menu button', { hasText: 'Pin to screen' }).click();
   expect((await state(page)).objects[1].input).toMatch(/^Text\("fixed", \(\d+, \d+\), "screen"\)$/);
   const pinned = (await fixed.boundingBox())!;
   expect(Math.abs(pinned.x - before.x)).toBeLessThan(2);

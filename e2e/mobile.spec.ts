@@ -28,3 +28,20 @@ test('phone layout: the worksheet preview fits the screen width', async ({ page 
   expect(box.x + box.width).toBeLessThanOrEqual(iw + 1);
   await expect(page.getByRole('button', { name: 'Print / Save as PDF' })).toBeInViewport();
 });
+
+test('phone: a long press on the graph opens its menu', async ({ page }) => {
+  await open(page);
+  const box = (await page.locator('.canvas-wrap canvas').boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  await page.waitForTimeout(650);
+  await expect(page.locator('.ctx-menu')).toBeVisible();
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  // lifting the finger does not pick the item under it
+  await page.waitForTimeout(200);
+  await expect(page.locator('.ctx-menu')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__matharium.getState().settings.axes)).toBe(true);
+  await page.getByRole('menuitemcheckbox', { name: 'Show grid' }).tap();
+  expect(await page.evaluate(() => (window as any).__matharium.getState().settings.grid)).toBe(false);
+});

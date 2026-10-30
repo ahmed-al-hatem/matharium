@@ -28,3 +28,9 @@ export const polarXY = (r: Fn1): { fx: Fn1; fy: Fn1 } => ({
   fx: (t) => r(t) * Math.cos(t),
   fy: (t) => r(t) * Math.sin(t),
 });
+
+/** A free point's input coordinates, cartesian "(x, y)" or polar "(r; θ°)". */
+export const pointCoords = (p: Vec2, polar: boolean) =>
+  polar
+    ? `(${+Math.hypot(p.x, p.y).toFixed(4)}; ${+((Math.atan2(p.y, p.x) * 180) / Math.PI).toFixed(2)}°)`
+    : `(${p.x}, ${p.y})`;
