@@ -31,7 +31,8 @@ export default function App() {
   const panel = useStore((s) => s.panel);
   const lang = useStore((s) => s.settings.lang);
   const keyboardOpen = useStore((s) => s.keyboardOpen);
-  const settingsOpen = useStore((s) => s.settingsOpen);
+  const settingsTab = useStore((s) => s.settingsTab);
+  const fontSize = useStore((s) => s.settings.fontSize);
   const toast = useStore((s) => s.toast);
   const fileName = useStore((s) => s.fileName);
   const dirty = useStore((s) => s.dirty);
@@ -44,6 +45,8 @@ export default function App() {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   }, [lang]);
+
+  useEffect(() => { document.documentElement.style.setProperty('--font-k', String(fontSize / 14)); }, [fontSize]);
 
   useEffect(() => { document.title = `${dirty ? '• ' : ''}${fileName} — Matharium`; }, [fileName, dirty]);
 
@@ -107,7 +110,7 @@ export default function App() {
         <Stage />
       </div>
       {keyboardOpen && <MathKeyboard />}
-      {settingsOpen && <SettingsDialog />}
+      {settingsTab && <SettingsDialog tab={settingsTab} />}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
       {toast && !updateReady && <div className="toast" role="status">{t(toast)}</div>}
       {updateReady && (

@@ -3,11 +3,11 @@ import { evaluateAll, missingSymbols } from './engine';
 import { draw, type Ctx } from '../graph2d/renderer';
 import { SvgCtx } from '../graph2d/svgctx';
 import type { MObj } from './types';
-import type { View } from '../store/project';
+import { DEFAULT_SETTINGS, type Settings, type View } from '../store/project';
 
 let id = 0;
 const o = (input: string, name = `o${id}`): MObj => ({ id: String(id++), name, input, color: '#E45B45', visible: true });
-const settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' as const };
+const settings: Settings = { ...DEFAULT_SETTINGS, labels: 'all' };
 
 describe('engine never throws on odd input', () => {
   const odd = [
@@ -48,7 +48,10 @@ describe('engine never throws on odd input', () => {
 });
 
 describe('renderer is robust at extreme views', () => {
-  const objs = [o('tan(x)', 'f'), o('1/x', 'g'), o('x^2 + y^2 = 0', 'eq1'), o('y > sin(x)', 'h'), o('A = (1, 2)', 'A'), o('Circle(A, 3)', 'c'), o('Integral(sin(x), 0, 3)', 'a')];
+  const objs = [o('tan(x)', 'f'), o('1/x', 'g'), o('x^2 + y^2 = 0', 'eq1'), o('y > sin(x)', 'h'), o('A = (1, 2)', 'A'), o('Circle(A, 3)', 'c'), o('Integral(sin(x), 0, 3)', 'a'),
+    o('RiemannSum(x^2, -1, 2, 30, "trap")', 'b'), o('IntegralBetween(x, x^2, 0, 1)', 'd'), o('SlopeField(x - y)', 's'), o('SolveODE(y, (0, 1))', 'u'),
+    o('Histogram({1, 2, 2, 3, 7}, 1)', 'l1'), o('BoxPlot({1, 2, 2, 3, 7})', 'l2'), o('Binomial(8, 0.3, 2, 4)', 'l3'), o('Normal(0, 1, -1, 2)', 'n'),
+    o('P = Point(c, 0.3)', 'P'), o('Q = Midpoint(P, A)', 'Q'), o('Locus(Q, P)', 'k')];
   const views: View[] = [
     { ox: 0, oy: 0, sx: 1e-4, sy: 1e-4 },
     { ox: 0, oy: 0, sx: 1e6, sy: 1e6 },
@@ -91,5 +94,21 @@ describe('performance budgets', () => {
     const ms = performance.now() - t;
     expect(ms).toBeLessThan(120);
     console.log(`draw 5 implicit: ${ms.toFixed(0)} ms`);
+  });
+
+  it.each([
+    ['default view', { ox: 0, oy: 0, sx: 50, sy: 50 }],
+    ['zoomed out', { ox: 0, oy: 0, sx: 0.5, sy: 0.5 }],
+    ['origin far away', { ox: 4000, oy: 2500, sx: 50, sy: 50 }],
+    ['stretched', { ox: 0, oy: 0, sx: 200, sy: 3 }],
+  ] as [string, View][])('draws five implicit curves on a polar grid (%s) within budget', (_n, view) => {
+    const objs = [o('x^2 + y^2 = 9'), o('x^3 - y^2 = 1'), o('sin(x) = cos(y)'), o('x y = 2'), o('x^2 - y^2 = 1')];
+    const items = evaluateAll(objs);
+    const opts = { W: 1400, H: 860, view, settings: { ...settings, gridType: 'polar' as const }, selectedId: null };
+    draw(noop, items, opts);
+    const t = performance.now();
+    draw(noop, items, opts);
+    const ms = performance.now() - t;
+    expect(ms).toBeLessThan(120);
   });
 });

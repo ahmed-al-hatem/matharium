@@ -31,7 +31,7 @@ export function Stage() {
         <button className="icon-btn" disabled={!canRedo} onClick={st.redo} aria-label={t('redo')} title={`${t('redo')} (Ctrl+Y)`}><Icon.redo /></button>
       </div>
       <div className="stage-gear">
-        <button className="icon-btn" onClick={() => st.setSettingsOpen(true)} aria-label={t('settings')} title={t('settings')}><Icon.gear /></button>
+        <button className="icon-btn" onClick={() => st.openSettings()} aria-label={t('settings')} title={t('settings')}><Icon.gear /></button>
       </div>
       <div className="view-ctrls">
         <button className="fab" onClick={st.resetView} aria-label={t('home')} title={t('home')}><Icon.home /></button>
