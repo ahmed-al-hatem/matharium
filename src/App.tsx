@@ -11,6 +11,7 @@ import { MathKeyboard } from './components/MathKeyboard';
 import { HelpDialog, SettingsDialog } from './components/Dialogs';
 import { Icon } from './components/Icons';
 import { openProject, saveProject } from './io/fileio';
+import { applyUpdate } from './io/pwa';
 
 const RAIL: { id: Panel; icon: () => JSX.Element; in3d: boolean }[] = [
   { id: 'algebra', icon: Icon.algebra, in3d: true },
@@ -34,6 +35,7 @@ export default function App() {
   const toast = useStore((s) => s.toast);
   const fileName = useStore((s) => s.fileName);
   const dirty = useStore((s) => s.dirty);
+  const updateReady = useStore((s) => s.pwa.updateReady);
   const [help, setHelp] = useState(false);
   const [width, setWidth] = useState(400);
   const resizing = useRef(false);
@@ -107,7 +109,13 @@ export default function App() {
       {keyboardOpen && <MathKeyboard />}
       {settingsOpen && <SettingsDialog />}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
-      {toast && <div className="toast" role="status">{t(toast)}</div>}
+      {toast && !updateReady && <div className="toast" role="status">{t(toast)}</div>}
+      {updateReady && (
+        <div className="toast update-banner" role="status">
+          {t('updateReady')}
+          <button onClick={applyUpdate}>{t('reload')}</button>
+        </div>
+      )}
     </div>
   );
 }

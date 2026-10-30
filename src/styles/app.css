@@ -228,6 +228,8 @@ table.sheet td input { width: 100%; background: transparent; border: 0; outline:
   position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--text-highlight); color: #000; padding: 10px 18px;
   border-radius: 10px; z-index: 100; font-weight: 500; box-shadow: 0 8px 28px rgba(0,0,0,.5);
 }
+.update-banner { display: flex; align-items: center; gap: 14px; }
+.update-banner button { background: var(--accent-blue); color: #fff; padding: 6px 14px; border-radius: 8px; font-weight: 500; }
 .watermark { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-family: var(--font-signature); font-size: 22px; color: rgba(120,121,120,.35); pointer-events: none; z-index: 2; }
 
 /* ---------- keyboard ---------- */

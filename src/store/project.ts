@@ -25,6 +25,8 @@ export interface ProjectFile {
   objects: MObj[]; sheet: Record<string, string>; table: TableCfg;
 }
 
+export interface PwaState { canInstall: boolean; installed: boolean; ios: boolean; updateReady: boolean }
+
 export interface TableCfg { ids: string[]; start: number; end: number; step: number }
 
 export const DEFAULT_VIEW: View = { ox: 0, oy: 0, sx: 50, sy: 50 };
@@ -49,6 +51,7 @@ interface State {
   dirty: boolean;
   homeToken: number;
   toast: string | null;
+  pwa: PwaState;
 
   setMode(m: Mode): void;
   setPanel(p: Panel | null): void;
@@ -63,6 +66,7 @@ interface State {
   setSettingsOpen(open: boolean): void;
   setTable(t: Partial<TableCfg>): void;
   notify(msg: string): void;
+  setPwa(p: Partial<PwaState>): void;
 
   /** Add an object from user input; returns its name. */
   addObject(input: string, opts?: Partial<MObj>): string;
@@ -144,6 +148,7 @@ export const useStore = create<State>((set, get) => {
     dirty: false,
     homeToken: 0,
     toast: null,
+    pwa: { canInstall: false, installed: false, ios: false, updateReady: false },
 
     setMode(mode) {
       const s = get();
@@ -172,6 +177,8 @@ export const useStore = create<State>((set, get) => {
       set({ toast });
       setTimeout(() => get().toast === toast && set({ toast: null }), 2600);
     },
+
+    setPwa: (p) => set({ pwa: { ...get().pwa, ...p } }),
 
     addObject(input, opts = {}) {
       const s = get();

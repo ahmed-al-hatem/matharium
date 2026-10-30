@@ -7,7 +7,7 @@ export const test = base.extend({
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => {
-      if (m.type() === 'error' && !/fonts\.(googleapis|gstatic)/.test(m.text() + (m.location().url ?? ''))) errors.push(m.text());
+      if (m.type() === 'error') errors.push(m.text());
     });
     await page.addInitScript(() => {
       if (!sessionStorage.getItem('__e2e')) { localStorage.clear(); sessionStorage.setItem('__e2e', '1'); }

@@ -3,6 +3,7 @@ import { useStore, type Mode } from '../store/project';
 import { useT } from '../i18n/i18n';
 import { exportCSV, exportPNG, exportSVG, newProject, openProject, saveProject, shareLink } from '../io/fileio';
 import { Icon } from './Icons';
+import { install } from '../io/pwa';
 
 const MODES: { id: Mode; icon: () => JSX.Element }[] = [
   { id: 'graphing', icon: Icon.graph },
@@ -27,6 +28,8 @@ export function TopBar({ onHelp }: { onHelp(): void }) {
   const fileName = useStore((s) => s.fileName);
   const dirty = useStore((s) => s.dirty);
   const lang = useStore((s) => s.settings.lang);
+  const pwa = useStore((s) => s.pwa);
+  const showInstall = !pwa.installed && (pwa.canInstall || pwa.ios);
   const st = useStore.getState();
   const [drawer, setDrawer] = useState(false);
   const [modeMenu, setModeMenu] = useState(false);
@@ -60,6 +63,7 @@ export function TopBar({ onHelp }: { onHelp(): void }) {
       <div className="spacer" />
       <span className="file-name" title={fileName}>{fileName === 'Untitled' ? t('untitled') : fileName}{dirty ? ' •' : ''}</span>
       <button className="icon-btn hide-sm" onClick={() => saveProject()} aria-label={t('save')} title={`${t('save')} (${mod}S)`}><Icon.save /></button>
+      {showInstall && <button className="icon-btn" onClick={install} aria-label={t('install')} title={t('install')}><Icon.download /></button>}
       <button className="icon-btn" onClick={shareLink} aria-label={t('share')} title={t('share')}><Icon.share /></button>
       <button className="pill-btn" onClick={() => st.setSettings({ lang: lang === 'en' ? 'ar' : 'en' })} title={t('language')}>
         <Icon.globe /><span className="hide-sm">{t('language')}</span>
@@ -89,6 +93,7 @@ export function TopBar({ onHelp }: { onHelp(): void }) {
               <button key={id} onClick={run(() => st.setMode(id))} style={id === mode ? { color: 'var(--accent-blue)' } : undefined}><Ic />{t(`modeShort.${id}`)}</button>
             ))}
             <h3>{t('general')}</h3>
+            {showInstall && <button onClick={run(install)}><Icon.download />{t('install')}</button>}
             <button onClick={run(() => st.setSettingsOpen(true))}><Icon.gear />{t('settings')}</button>
             <button onClick={run(shareLink)}><Icon.share />{t('share')}</button>
             <button onClick={run(() => st.setSettings({ lang: lang === 'en' ? 'ar' : 'en' }))}><Icon.globe />{t('language')}</button>

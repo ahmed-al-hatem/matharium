@@ -67,7 +67,7 @@ function parseCsv(text: string): string[][] {
 
 export const colName = (i: number) => String.fromCharCode(65 + i);
 
-async function loadFile(file: File, handle?: any) {
+export async function loadFile(file: File, handle?: any) {
   const st = useStore.getState();
   const text = await file.text();
   if (/\.csv$/i.test(file.name)) {

@@ -2,10 +2,21 @@
 
 Interactive math web app: graph functions and equations, solve, build geometric constructions, and plot in 3D. Dark scientific theme from the Matharium style guide (STIX Two Text, Space Grotesk, IBM Plex Sans Arabic, JetBrains Mono, Caveat), with an English/Arabic (RTL) interface.
 
+**Live app:** https://ahmed-al-hatem.github.io/matharium/
+
+## Install as an app
+Matharium is a Progressive Web App and works offline after the first visit.
+- **Chrome / Edge (Windows, macOS, Linux, Android):** use the install icon in the address bar or Menu → *Install app* inside Matharium. The installed app opens `.mth` project files directly.
+- **iPhone / iPad (Safari):** Share → *Add to Home Screen*.
+
+Updates download in the background; a *Reload* banner appears when a new version is ready.
+
+## Development
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # engine, SVG export and spreadsheet tests
+npm test         # unit tests (vitest)
+npm run e2e      # Playwright: desktop, mobile and offline PWA checks
 npm run build    # production build in dist/
 ```
 
