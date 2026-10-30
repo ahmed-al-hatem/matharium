@@ -5,7 +5,7 @@ import { Viewport } from '../graph2d/viewport';
 import { Icon } from './Icons';
 import { helpRows, type HelpGroup } from '../math/commands';
 
-function Modal({ title, onClose, children }: { title: string; onClose(): void; children: React.ReactNode }) {
+export function Modal({ title, onClose, children, wide }: { title: string; onClose(): void; children: React.ReactNode; wide?: boolean }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', h);
@@ -13,7 +13,7 @@ function Modal({ title, onClose, children }: { title: string; onClose(): void; c
   }, [onClose]);
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <h2>{title}<button className="icon-btn" onClick={onClose} aria-label="Close"><Icon.close /></button></h2>
         {children}
       </div>
@@ -216,7 +216,7 @@ const EXTRA: Partial<Record<string, { code: string; en: string; ar: string }[]>>
 
 const GROUPS: { key: string; table?: HelpGroup }[] = [
   { key: 'help.functions' }, { key: 'help.polar' }, { key: 'help.commands', table: 'commands' }, { key: 'help.fit', table: 'fit' }, { key: 'help.calculus', table: 'calculus' },
-  { key: 'help.geometry', table: 'geometry' }, { key: 'help.stats', table: 'stats' }, { key: 'help.3d', table: '3d' }, { key: 'help.keys' },
+  { key: 'help.geometry', table: 'geometry' }, { key: 'help.stats', table: 'stats' }, { key: 'help.3d', table: '3d' }, { key: 'help.annotate', table: 'annotate' }, { key: 'help.keys' },
 ];
 
 export function helpContent(lang: 'en' | 'ar'): { key: string; rows: Row[] }[] {

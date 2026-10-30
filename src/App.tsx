@@ -9,6 +9,8 @@ import { TablePanel } from './components/TablePanel';
 import { SpreadsheetPanel } from './components/SpreadsheetPanel';
 import { MathKeyboard } from './components/MathKeyboard';
 import { HelpDialog, SettingsDialog } from './components/Dialogs';
+import { TemplatesDialog } from './components/TemplatesDialog';
+import { Worksheet } from './components/Worksheet';
 import { Icon } from './components/Icons';
 import { openProject, saveProject } from './io/fileio';
 import { applyUpdate } from './io/pwa';
@@ -38,6 +40,8 @@ export default function App() {
   const dirty = useStore((s) => s.dirty);
   const updateReady = useStore((s) => s.pwa.updateReady);
   const [help, setHelp] = useState(false);
+  const [templates, setTemplates] = useState(false);
+  const [worksheet, setWorksheet] = useState(false);
   const [width, setWidth] = useState(400);
   const resizing = useRef(false);
 
@@ -87,7 +91,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar onHelp={() => setHelp(true)} />
+      <TopBar onHelp={() => setHelp(true)} onTemplates={() => setTemplates(true)} onWorksheet={() => setWorksheet(true)} />
       <div className="main">
         <nav className="rail" aria-label="Views">
           {rail.map(({ id, icon: Ic }) => (
@@ -112,6 +116,8 @@ export default function App() {
       {keyboardOpen && <MathKeyboard />}
       {settingsTab && <SettingsDialog tab={settingsTab} />}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
+      {templates && <TemplatesDialog onClose={() => setTemplates(false)} />}
+      {worksheet && <Worksheet onClose={() => setWorksheet(false)} />}
       {toast && !updateReady && <div className="toast" role="status">{t(toast)}</div>}
       {updateReady && (
         <div className="toast update-banner" role="status">

@@ -1,0 +1,100 @@
+{
+  "app": "matharium",
+  "version": 1,
+  "mode": "graphing",
+  "view": {
+    "ox": 0,
+    "oy": 0,
+    "sx": 45,
+    "sy": 45
+  },
+  "settings": {
+    "grid": true,
+    "axes": true,
+    "labels": true,
+    "snap": true,
+    "digits": 2,
+    "range3d": 6
+  },
+  "objects": [
+    {
+      "id": "t0",
+      "name": "a",
+      "input": "a = 2",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -4,
+        "max": 4,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t1",
+      "name": "b",
+      "input": "b = 1",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": 0,
+        "max": 4,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t2",
+      "name": "c",
+      "input": "c = 0",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -3.14,
+        "max": 3.14,
+        "step": 0.01
+      }
+    },
+    {
+      "id": "t3",
+      "name": "d",
+      "input": "d = 0",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -4,
+        "max": 4,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t4",
+      "name": "f",
+      "input": "f(x) = a sin(b x + c) + d",
+      "color": "#E45B45",
+      "visible": true
+    },
+    {
+      "id": "t5",
+      "name": "text1",
+      "input": "text1 = Text(\"$f(x) = a\\sin(bx + c) + d$\", (24, 64), \"screen\")",
+      "color": "#DCDCDC",
+      "visible": true
+    }
+  ],
+  "sheet": {},
+  "table": {
+    "ids": [],
+    "start": -5,
+    "end": 5,
+    "step": 1
+  },
+  "meta": {
+    "title": {
+      "en": "Amplitude, period and phase",
+      "ar": "السعة والدور والإزاحة"
+    },
+    "description": {
+      "en": "The sine wave a·sin(bx + c) + d: amplitude |a|, period 2π/b, phase shift and vertical shift.",
+      "ar": "الموجة الجيبية a·sin(bx + c) + d: السعة |a| والدور 2π/b والإزاحة الأفقية والرأسية."
+    }
+  }
+}

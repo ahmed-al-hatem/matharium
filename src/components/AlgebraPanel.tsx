@@ -11,6 +11,9 @@ import { formatNote } from '../math/steps';
 import { useT } from '../i18n/i18n';
 import { Icon } from './Icons';
 import { MathField } from './MathField';
+import { RichText } from './RichText';
+import { roundAt, textInput } from '../math/annotate';
+import { Viewport } from '../graph2d/viewport';
 
 function Tex({ tex, className = 'alg-tex' }: { tex: string; className?: string }) {
   const html = useMemo(() => {
@@ -66,6 +69,19 @@ function SliderRow({ r }: { r: Resolved }) {
       <span className="lim">{s.max}</span>
     </div>
   );
+}
+
+/** Switch a text between following the graph and staying fixed on screen, keeping where it appears. */
+function pinLabel(r: Resolved) {
+  const v = r.value;
+  const el = document.querySelector('.canvas-wrap');
+  if (v?.type !== 'label' || !el) return;
+  const st = useStore.getState();
+  const vp = new Viewport(st.view, el.clientWidth, el.clientHeight);
+  const p = v.screen
+    ? { x: roundAt(vp.wx(v.p.x), st.view.sx), y: roundAt(vp.wy(v.p.y), st.view.sy) }
+    : { x: Math.round(vp.px(v.p.x)), y: Math.round(vp.py(v.p.y)) };
+  st.updateInput(r.obj.id, textInput(v.text, p, !v.screen, splitDefinition(r.obj.input).name));
 }
 
 function ItemMenu({ r, onClose }: { r: Resolved; onClose(): void }) {
@@ -131,6 +147,9 @@ function ItemMenu({ r, onClose }: { r: Resolved; onClose(): void }) {
         </>
       )}
       <hr />
+      {r.value?.type === 'label' && st.mode !== '3d' && (
+        <button onClick={() => { pinLabel(r); onClose(); }}><Icon.label />{t(r.value.screen ? 'pinGraph' : 'pinScreen')}</button>
+      )}
       <button onClick={() => st.patchObject(obj.id, { showLabel: !labelled })}><Icon.label />{t('showLabel')}{labelled ? ' ✓' : ''}</button>
       <button onClick={() => {
         const n = prompt(t('rename'), obj.name);
@@ -188,6 +207,8 @@ function AlgebraItem({ r }: { r: Resolved }) {
         {editing ? (
           <MathField value={draft} onChange={setDraft} onSubmit={submit} autoFocus complete
             onCancel={() => st().setEditing(null)} onBlur={() => submit(draft)} ariaLabel={obj.name} />
+        ) : r.value?.type === 'label' ? (
+          <RichText className="alg-tex alg-text" text={r.value.text} />
         ) : (
           <Tex tex={r.tex} />
         )}

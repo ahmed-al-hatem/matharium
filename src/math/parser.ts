@@ -1,8 +1,12 @@
 import type { RelOp } from './types';
 import { COMMAND_TABLE, commandCategory } from './commands';
 
-/** Convert keyboard / pretty symbols into parser-friendly ASCII. */
+/** Convert keyboard / pretty symbols into parser-friendly ASCII. Quoted strings are left as typed. */
 export function normalize(s: string): string {
+  return s.split(/("(?:[^"\\]|\\.)*")/).map((part, i) => (i % 2 ? part : normalizeExpr(part))).join('').trim();
+}
+
+function normalizeExpr(s: string): string {
   return s
     .replace(/[⁦-⁩]/g, '')
     .replace(/π/g, 'pi')
@@ -27,29 +31,39 @@ export function normalize(s: string): string {
 const OPEN = '([{';
 const CLOSE = ')]}';
 
+/** Walk `s` calling `fn(ch, i, depth)` for every character outside string literals. */
+function scan(s: string, fn: (ch: string, i: number, depth: number) => boolean | void) {
+  let depth = 0, inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (OPEN.includes(ch)) depth++;
+    else if (CLOSE.includes(ch)) depth--;
+    if (fn(ch, i, depth)) return;
+  }
+}
+
 /** Split on top-level commas (outside any brackets). */
 export function splitArgs(s: string): string[] {
   const out: string[] = [];
-  let depth = 0, cur = '';
-  for (const ch of s) {
-    if (OPEN.includes(ch)) depth++;
-    else if (CLOSE.includes(ch)) depth--;
-    if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += ch;
-  }
-  if (cur.trim() || out.length) out.push(cur.trim());
+  let start = 0;
+  scan(s, (ch, i, depth) => { if (ch === ',' && depth === 0) { out.push(s.slice(start, i).trim()); start = i + 1; } });
+  const last = s.slice(start).trim();
+  if (last || out.length) out.push(last);
   return out;
 }
 
 /** True when the bracket opened at index 0 closes at the last character. */
 function wrapped(s: string, open: string, close: string): boolean {
   if (s[0] !== open || s[s.length - 1] !== close) return false;
-  let depth = 0;
-  for (let i = 0; i < s.length; i++) {
-    if (OPEN.includes(s[i])) depth++;
-    else if (CLOSE.includes(s[i])) depth--;
-    if (depth === 0 && i < s.length - 1) return false;
-  }
-  return true;
+  let ok = true;
+  scan(s, (_ch, i, depth) => { if (depth === 0 && i < s.length - 1) return !(ok = false); });
+  return ok;
 }
 
 /** "(a, b)" or "(a, b, c)" → coordinate strings. */
@@ -101,21 +115,20 @@ export function asCommand(s: string): { name: string; args: string[] } | null {
 
 /** Find a top-level relational operator. */
 export function splitRelation(s: string): { lhs: string; op: RelOp; rhs: string } | null {
-  let depth = 0;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (OPEN.includes(ch)) depth++;
-    else if (CLOSE.includes(ch)) depth--;
-    if (depth !== 0) continue;
+  let out: { lhs: string; op: RelOp; rhs: string } | null = null;
+  let skip = -1;
+  scan(s, (ch, i, depth) => {
+    if (depth !== 0 || i <= skip) return;
     const two = s.slice(i, i + 2);
-    if (two === '<=' || two === '>=') return { lhs: s.slice(0, i).trim(), op: two, rhs: s.slice(i + 2).trim() };
-    if (two === '==' || two === '!=') { i++; continue; }
+    if (two === '<=' || two === '>=') { out = { lhs: s.slice(0, i).trim(), op: two, rhs: s.slice(i + 2).trim() }; return true; }
+    if (two === '==' || two === '!=') { skip = i + 1; return; }
     if (ch === '<' || ch === '>' || ch === '=') {
-      if (s[i - 1] === '!' || s[i - 1] === '=') continue;
-      return { lhs: s.slice(0, i).trim(), op: ch as RelOp, rhs: s.slice(i + 1).trim() };
+      if (s[i - 1] === '!' || s[i - 1] === '=') return;
+      out = { lhs: s.slice(0, i).trim(), op: ch as RelOp, rhs: s.slice(i + 1).trim() };
+      return true;
     }
-  }
-  return null;
+  });
+  return out;
 }
 
 export interface Definition { name?: string; params?: string[]; body: string }
@@ -134,7 +147,7 @@ export function splitDefinition(input: string): Definition {
   return { name, params: params ? params.split(',').map((p) => p.trim()) : undefined, body: body.trim() };
 }
 
-export type Category = 'point' | 'function' | 'number' | 'equation' | 'list' | 'path' | 'surface' | 'text';
+export type Category = 'point' | 'function' | 'number' | 'equation' | 'list' | 'path' | 'surface' | 'text' | 'label' | 'stroke' | 'arrow';
 
 export const COMMANDS = COMMAND_TABLE.map((c) => c.name);
 

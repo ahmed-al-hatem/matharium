@@ -44,7 +44,11 @@ const ARG = {
   at: { en: 'a', ar: 'a' },
   degree: { en: 'Degree', ar: 'الدرجة' },
   list: { en: 'List', ar: 'قائمة' },
+  text: { en: '"Text"', ar: '"نص"' },
+  position: { en: 'Position', ar: 'الموضع' },
+  screen: { en: '"screen"', ar: '"screen"' },
   points: { en: 'List of points', ar: 'قائمة نقاط' },
+  tip: { en: 'Tip', ar: 'الرأس' },
   width: { en: 'Bin width', ar: 'عرض الفئة' },
   yPos: { en: 'y position', ar: 'موضع y' },
   mean: { en: 'μ', ar: 'μ' },
@@ -58,7 +62,7 @@ const ARG = {
 } satisfies Record<string, L>;
 
 export type ArgKey = keyof typeof ARG;
-export type HelpGroup = 'commands' | 'calculus' | 'fit' | 'geometry' | 'stats' | '3d';
+export type HelpGroup = 'commands' | 'calculus' | 'fit' | 'geometry' | 'stats' | '3d' | 'annotate';
 
 export interface CommandDef {
   name: string;
@@ -156,6 +160,13 @@ export const COMMAND_TABLE: CommandDef[] = [
   { name: 'Surface', cat: 'surface', group: '3d', sigs: [['xExpr', 'yExpr', 'zExpr', 'param', 'pStart', 'pEnd', 'param', 'pStart', 'pEnd']], examples: [
     ex('Surface(u, v, u v, u, -2, 2, v, -2, 2)', 'parametric surface', 'سطح وسيطي')] },
   { name: 'Sphere', cat: 'surface', group: '3d', sigs: [['center', 'radius']], examples: [ex('Sphere((0,0,0), 2)', 'sphere', 'كرة')] },
+
+  // ---- text & drawing ----
+  { name: 'Text', cat: 'label', group: 'annotate', sigs: [['text', 'position'], ['text', 'position', 'screen']], examples: [
+    ex('Text("Hello", (1, 2))', 'text on the graph', 'نص على الرسم'), ex('Text("$\\frac{a}{b}$ نص عربي", (1, 2))', 'LaTeX between $…$, Arabic', 'LaTeX بين $…$، ونص عربي'),
+    ex('Text("Title", (20, 20), "screen")', 'fixed on screen', 'مثبت على الشاشة'), ex('Text("A", A)', 'text that follows point A', 'نص يتبع النقطة A')] },
+  { name: 'Arrow', cat: 'arrow', group: 'annotate', sigs: [['point', 'tip']], examples: [ex('Arrow((0, 0), (2, 1))', 'arrow', 'سهم')] },
+  { name: 'Stroke', cat: 'stroke', group: 'annotate', sigs: [['points']], examples: [ex('Stroke({(0, 0), (1, 1), (2, 0)})', 'freehand stroke (pen tool)', 'خط حر (أداة القلم)')] },
 ];
 
 export const COMMAND_BY_NAME = new Map(COMMAND_TABLE.map((c) => [c.name, c]));

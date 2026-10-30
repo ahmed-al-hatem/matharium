@@ -33,6 +33,7 @@ npm run build    # production build in dist/
 - **Animation**: per-slider speed (×0.25–×4) and mode (back and forth, increasing, once), *Play all* / *Stop all*, traces for moving points, and video recording of the 2D or 3D view to `.webm` (offline, `canvas.captureStream` + `MediaRecorder`), stopping after one cycle. A whole animation is one undo step.
 - **3D**: surfaces `z = f(x, y)`, implicit surfaces (`x^2 + y^2 + z^2 = 9`), planes, points, vectors, `Curve`, parametric `Surface`, `Sphere`.
 - **Table & spreadsheet**: a table of function values, and a spreadsheet with A1 formulas (`=sum(A1:A5)`, `=f(B2)`). You can plot the A/B columns as points or fit a regression line.
+- **Teacher tools**: text on the graph with `Text("…", (x, y))` or the Text tool (LaTeX between `$…$`, Arabic right-to-left, pinned to the graph or to the screen), a freehand Pen (`Stroke`, simplified with Douglas–Peucker) and Arrows; a printable worksheet (title, vector graph, equations, notes, answer space) saved as PDF from the browser's print dialog; 11 lesson templates in `src/templates/` (New from template), and your own templates saved in the browser.
 - **Files**: New, Open (`.mth`/`.json` projects, `.csv` into the spreadsheet), Save, Save as (File System Access API, with a download fallback), Export PNG/SVG/CSV, a share link, and autosave.
 - Undo/redo, the on-screen math keyboard, keyboard shortcuts (Ctrl+Z/Y/S/Shift+S/O, Delete, Esc), and a responsive layout.
 

@@ -29,6 +29,9 @@ const ICONS: Record<ToolId, ReactNode> = {
   angle: <S><path d="M26 24H6l14-16" stroke={G} /><path d="M14 24a8 8 0 0 0-2.8-6.2" stroke={MU} strokeWidth={2.4} /></S>,
   slider: <S><path d="M5 16h22" stroke={G} />{dot(12, 16)}<circle cx={12} cy={16} r={4.5} stroke={B} /></S>,
   delete: <S><path d="M8 10h16M13 10V7h6v3M10 10l1 15h10l1-15" stroke={CO} /></S>,
+  text: <S><path d="M8 8h16M16 8v17M12.5 25h7" stroke={G} strokeWidth={2} /><path d="M24 20v7" stroke={B} /></S>,
+  pen: <S><path d="M5 24c3-6 6 1 9-4s5-8 8-6" stroke={CO} strokeWidth={2} /><path d="m21 5 6 6-9 9-7 1 1-7z" stroke={G} /></S>,
+  arrow: <S><path d="M6 25 25 7" stroke={MU} strokeWidth={2} /><path d="M16 7h9v9" stroke={MU} strokeWidth={2} /></S>,
 };
 
 const GROUPS: { key: string; tools: ToolId[] }[] = [
@@ -36,6 +39,7 @@ const GROUPS: { key: string; tools: ToolId[] }[] = [
   { key: 'group.lines', tools: ['segment', 'line', 'ray', 'vector', 'polygon'] },
   { key: 'group.construct', tools: ['circle', 'circle3', 'midpoint', 'perpendicular', 'parallel', 'bisector', 'intersect', 'tangent'] },
   { key: 'group.measure', tools: ['distance', 'angle'] },
+  { key: 'group.annotate', tools: ['text', 'pen', 'arrow'] },
 ];
 
 /** Faint x/y/z axes in a 3D-ish projection, shared by the 3D template icons. */

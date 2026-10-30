@@ -1,0 +1,108 @@
+{
+  "app": "matharium",
+  "version": 1,
+  "mode": "graphing",
+  "view": {
+    "ox": 0,
+    "oy": 0,
+    "sx": 50,
+    "sy": 50
+  },
+  "settings": {
+    "grid": true,
+    "axes": true,
+    "labels": true,
+    "snap": true,
+    "digits": 2,
+    "range3d": 6
+  },
+  "objects": [
+    {
+      "id": "t0",
+      "name": "m",
+      "input": "m = 1",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -5,
+        "max": 5,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t1",
+      "name": "b",
+      "input": "b = 1",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -5,
+        "max": 5,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t2",
+      "name": "f",
+      "input": "f(x) = m x + b",
+      "color": "#E45B45",
+      "visible": true
+    },
+    {
+      "id": "t3",
+      "name": "P",
+      "input": "P = (0, b)",
+      "color": "#3282F6",
+      "visible": true
+    },
+    {
+      "id": "t4",
+      "name": "run",
+      "input": "run = Segment((0, b), (1, b))",
+      "color": "#E1B549",
+      "visible": true,
+      "lineWidth": 1.5,
+      "showLabel": false
+    },
+    {
+      "id": "t5",
+      "name": "rise",
+      "input": "rise = Segment((1, b), (1, m + b))",
+      "color": "#E1B549",
+      "visible": true,
+      "lineWidth": 1.5,
+      "showLabel": false
+    },
+    {
+      "id": "t6",
+      "name": "text1",
+      "input": "text1 = Text(\"$y = mx + b$\", (24, 64), \"screen\")",
+      "color": "#DCDCDC",
+      "visible": true
+    },
+    {
+      "id": "t7",
+      "name": "text2",
+      "input": "text2 = Text(\"$m$\", (1.1, b + m / 2))",
+      "color": "#E1B549",
+      "visible": true
+    }
+  ],
+  "sheet": {},
+  "table": {
+    "ids": [],
+    "start": -5,
+    "end": 5,
+    "step": 1
+  },
+  "meta": {
+    "title": {
+      "en": "Linear function with sliders",
+      "ar": "الدالة الخطية بالمنزلقات"
+    },
+    "description": {
+      "en": "Change the slope m and the intercept b and watch the line and its slope triangle.",
+      "ar": "غيّر الميل m والمقطع b وراقب المستقيم ومثلث الميل."
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "app": "matharium",
+  "version": 1,
+  "mode": "geometry",
+  "view": {
+    "ox": 0,
+    "oy": 0,
+    "sx": 55,
+    "sy": 55
+  },
+  "settings": {
+    "grid": false,
+    "axes": false,
+    "labels": true,
+    "snap": true,
+    "digits": 2,
+    "range3d": 6
+  },
+  "objects": [
+    {
+      "id": "t0",
+      "name": "A",
+      "input": "A = (-3, -2)",
+      "color": "#3282F6",
+      "visible": true
+    },
+    {
+      "id": "t1",
+      "name": "B",
+      "input": "B = (4, -1.5)",
+      "color": "#3282F6",
+      "visible": true
+    },
+    {
+      "id": "t2",
+      "name": "C",
+      "input": "C = (0.5, 3.5)",
+      "color": "#3282F6",
+      "visible": true
+    },
+    {
+      "id": "t3",
+      "name": "tri",
+      "input": "tri = Polygon(A, B, C)",
+      "color": "#6DC4AA",
+      "visible": true
+    },
+    {
+      "id": "t4",
+      "name": "ma",
+      "input": "ma = Segment(A, Midpoint(B, C))",
+      "color": "#DCDCDC",
+      "visible": true,
+      "lineWidth": 1,
+      "showLabel": false
+    },
+    {
+      "id": "t5",
+      "name": "mb",
+      "input": "mb = Segment(B, Midpoint(A, C))",
+      "color": "#DCDCDC",
+      "visible": true,
+      "lineWidth": 1,
+      "showLabel": false
+    },
+    {
+      "id": "t6",
+      "name": "mc",
+      "input": "mc = Segment(C, Midpoint(A, B))",
+      "color": "#DCDCDC",
+      "visible": true,
+      "lineWidth": 1,
+      "showLabel": false
+    },
+    {
+      "id": "t7",
+      "name": "G",
+      "input": "G = ((A.x + B.x + C.x) / 3, (A.y + B.y + C.y) / 3)",
+      "color": "#E45B45",
+      "visible": true
+    },
+    {
+      "id": "t8",
+      "name": "k",
+      "input": "k = Circle(A, B, C)",
+      "color": "#E1B549",
+      "visible": true,
+      "lineWidth": 1.5,
+      "showLabel": false
+    },
+    {
+      "id": "t9",
+      "name": "O",
+      "input": "O = Intersect(PerpendicularBisector(A, B), PerpendicularBisector(B, C))",
+      "color": "#E1B549",
+      "visible": true
+    },
+    {
+      "id": "t10",
+      "name": "H",
+      "input": "H = Intersect(Perpendicular(A, Line(B, C)), Perpendicular(B, Line(A, C)))",
+      "color": "#B07CE8",
+      "visible": true
+    }
+  ],
+  "sheet": {},
+  "table": {
+    "ids": [],
+    "start": -5,
+    "end": 5,
+    "step": 1
+  },
+  "meta": {
+    "title": {
+      "en": "Centers of a triangle",
+      "ar": "مراكز المثلث"
+    },
+    "description": {
+      "en": "Drag the vertices: centroid G (medians), circumcenter O with the circumcircle, and orthocenter H.",
+      "ar": "اسحب الرؤوس: مركز الثقل G (المتوسطات)، ومركز الدائرة المحيطة O، وملتقى الارتفاعات H."
+    }
+  }
+}

@@ -1,5 +1,8 @@
 import type { Resolved, Value, Vec2 } from '../math/types';
 import type { Viewport } from './viewport';
+import { isRtl, labelPlain } from '../math/annotate';
+
+export const labelBox = (text: string) => ({ w: Math.max(12, labelPlain(text).length * 8.5), h: 26 });
 
 function segDist(p: Vec2, a: Vec2, b: Vec2, clampLo = true, clampHi = true) {
   const dx = b.x - a.x, dy = b.y - a.y;
@@ -34,6 +37,15 @@ export function pixelDistance(v: Value, vp: Viewport, px: number, py: number): n
         if ([a.x, a.y, b.x, b.y].every(Number.isFinite)) best = Math.min(best, segDist(m, P(a), P(b)));
       }
       return best;
+    }
+    case 'stroke': return Math.min(...v.pts.slice(1).map((p, i) => segDist(m, P(v.pts[i]), P(p))));
+    case 'label': {
+      // the HTML layer's box, estimated from the plain text (17px font)
+      const box = labelBox(v.text);
+      const ax = v.screen ? v.p.x : vp.px(v.p.x), ay = v.screen ? v.p.y : vp.py(v.p.y);
+      const x0 = isRtl(v.text) ? ax - box.w : ax;
+      const dx = Math.max(x0 - px, 0, px - (x0 + box.w)), dy = Math.max(ay - py, 0, py - (ay + box.h));
+      return Math.hypot(dx, dy);
     }
     case 'function': case 'integral': case 'riemann': case 'between': {
       const y = v.f(vp.wx(px));

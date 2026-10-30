@@ -1,0 +1,124 @@
+{
+  "app": "matharium",
+  "version": 1,
+  "mode": "geometry",
+  "view": {
+    "ox": 0,
+    "oy": 0,
+    "sx": 170,
+    "sy": 170
+  },
+  "settings": {
+    "grid": true,
+    "axes": true,
+    "labels": true,
+    "snap": true,
+    "digits": 2,
+    "range3d": 6
+  },
+  "objects": [
+    {
+      "id": "t0",
+      "name": "a",
+      "input": "a = 0.8",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": 0,
+        "max": 6.28,
+        "step": 0.01
+      }
+    },
+    {
+      "id": "t1",
+      "name": "O",
+      "input": "O = (0, 0)",
+      "color": "#DCDCDC",
+      "visible": true
+    },
+    {
+      "id": "t2",
+      "name": "c",
+      "input": "c = Circle(O, 1)",
+      "color": "#DCDCDC",
+      "visible": true,
+      "lineWidth": 1.5
+    },
+    {
+      "id": "t3",
+      "name": "P",
+      "input": "P = (cos(a), sin(a))",
+      "color": "#3282F6",
+      "visible": true
+    },
+    {
+      "id": "t4",
+      "name": "r",
+      "input": "r = Segment(O, P)",
+      "color": "#DCDCDC",
+      "visible": true,
+      "showLabel": false
+    },
+    {
+      "id": "t5",
+      "name": "s",
+      "input": "s = Segment((cos(a), 0), P)",
+      "color": "#E45B45",
+      "visible": true,
+      "showLabel": false
+    },
+    {
+      "id": "t6",
+      "name": "g",
+      "input": "g = Segment(O, (cos(a), 0))",
+      "color": "#6DC4AA",
+      "visible": true,
+      "showLabel": false
+    },
+    {
+      "id": "t7",
+      "name": "ang",
+      "input": "ang = Angle((1, 0), O, P)",
+      "color": "#E1B549",
+      "visible": true
+    },
+    {
+      "id": "t8",
+      "name": "text1",
+      "input": "text1 = Text(\"$\\sin a$\", (cos(a) + 0.04, sin(a) / 2))",
+      "color": "#E45B45",
+      "visible": true
+    },
+    {
+      "id": "t9",
+      "name": "text2",
+      "input": "text2 = Text(\"$\\cos a$\", (cos(a) / 2 - 0.1, -0.04))",
+      "color": "#6DC4AA",
+      "visible": true
+    },
+    {
+      "id": "t10",
+      "name": "text3",
+      "input": "text3 = Text(\"$\\sin^2 a + \\cos^2 a = 1$\", (24, 64), \"screen\")",
+      "color": "#DCDCDC",
+      "visible": true
+    }
+  ],
+  "sheet": {},
+  "table": {
+    "ids": [],
+    "start": -5,
+    "end": 5,
+    "step": 1
+  },
+  "meta": {
+    "title": {
+      "en": "Unit circle and trigonometric ratios",
+      "ar": "دائرة الوحدة والنسب المثلثية"
+    },
+    "description": {
+      "en": "Move the angle a: the point P = (cos a, sin a) runs around the unit circle.",
+      "ar": "حرّك الزاوية a: النقطة P = (cos a, sin a) تدور على دائرة الوحدة."
+    }
+  }
+}

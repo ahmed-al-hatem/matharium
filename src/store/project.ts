@@ -11,7 +11,7 @@ export type Panel = 'algebra' | 'tools' | 'table' | 'spreadsheet';
 export type ToolId =
   | 'move' | 'point' | 'pointOn' | 'segment' | 'line' | 'ray' | 'vector' | 'polygon' | 'circle' | 'circle3'
   | 'midpoint' | 'perpendicular' | 'parallel' | 'bisector' | 'intersect' | 'tangent'
-  | 'distance' | 'angle' | 'slider' | 'delete';
+  | 'distance' | 'angle' | 'slider' | 'delete' | 'text' | 'pen' | 'arrow';
 
 export interface View { ox: number; oy: number; sx: number; sy: number }
 export type LabelMode = 'auto' | 'points' | 'all' | 'none';
@@ -43,7 +43,11 @@ export interface ProjectFile {
   objects: MObj[]; sheet: Record<string, string>; table: TableCfg;
   /** The other modes' workspaces (the current mode's lives in the fields above). */
   workspaces?: Partial<Record<Mode, Workspace>>;
+  /** Lesson templates only: what the "New from template" dialog shows. */
+  meta?: TemplateMeta;
 }
+
+export interface TemplateMeta { title: Record<'en' | 'ar', string>; description: Record<'en' | 'ar', string> }
 
 export interface PwaState { canInstall: boolean; installed: boolean; ios: boolean; updateReady: boolean }
 
@@ -182,12 +186,16 @@ export function freeName(objects: MObj[], input: string): string {
   const numbered = (p: string) => { for (let n = 1; ; n++) if (!used.has(p + n)) return p + n; };
   if (cat === 'equation') return numbered('eq');
   if (cat === 'list' || cat === 'text') return numbered('l');
+  if (cat === 'label') return numbered('text');
+  if (cat === 'stroke') return numbered('pen');
+  if (cat === 'arrow') return numbered('arrow');
   return take(SEQ[cat] ?? SEQ.function);
 }
 
 function nextColor(objects: MObj[], input: string) {
   const cat = categorize(input);
   if (cat === 'point' || cat === 'number') return '#3282F6';
+  if (cat === 'label') return '#DCDCDC';
   const n = objects.filter((o) => !['point', 'number'].includes(categorize(o.input))).length;
   return PALETTE[n % PALETTE.length];
 }
