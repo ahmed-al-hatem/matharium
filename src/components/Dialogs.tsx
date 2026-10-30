@@ -65,7 +65,7 @@ export function SettingsDialog({ tab }: { tab: SettingsTab }) {
   );
 }
 
-function Check({ k, label }: { k: 'grid' | 'axes' | 'snap' | 'axes3d' | 'plane3d' | 'grid3d'; label: string }) {
+function Check({ k, label }: { k: 'grid' | 'axes' | 'snap' | 'axes3d' | 'plane3d' | 'grid3d' | 'exact'; label: string }) {
   const t = useT();
   const v = useStore((x) => x.settings[k]);
   return <label className="check"><input type="checkbox" checked={v} onChange={(e) => useStore.getState().setSettings({ [k]: e.target.checked })} />{t(label)}</label>;
@@ -79,9 +79,9 @@ function GeneralTab() {
   const t = useT();
   const s = useStore((x) => x.settings);
   const set = useStore.getState().setSettings;
-  // TODO(A1): "exact or decimal results by default" goes here once session A1 is merged
   return (
     <>
+      <Check k="exact" label="exact" />
       <Field label={t('language')}>
         <select className="field" value={s.lang} onChange={(e) => set({ lang: e.target.value as 'en' | 'ar' })}>
           <option value="en">English</option><option value="ar">العربية</option>

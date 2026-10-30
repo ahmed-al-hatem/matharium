@@ -7,15 +7,33 @@ import { useResolved } from '../store/resolved';
 import { evaluateAll, missingSymbols } from '../math/engine';
 import { splitDefinition } from '../math/parser';
 import { is3DOnly, type Resolved } from '../math/types';
+import { formatNote } from '../math/steps';
 import { useT } from '../i18n/i18n';
 import { Icon } from './Icons';
 import { MathField } from './MathField';
 
-function Tex({ tex }: { tex: string }) {
+function Tex({ tex, className = 'alg-tex' }: { tex: string; className?: string }) {
   const html = useMemo(() => {
     try { return katex.renderToString(tex, { throwOnError: false, strict: false }); } catch { return tex; }
   }, [tex]);
-  return <div className="alg-tex" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+function StepsList({ r }: { r: Resolved }) {
+  const t = useT();
+  const lang = useStore((s) => s.settings.lang);
+  const steps = useMemo(() => r.steps?.() ?? null, [r]);
+  if (!steps?.length) return <div className="alg-note">{t('steps.none')}</div>;
+  return (
+    <ol className="steps-list" onClick={(e) => e.stopPropagation()}>
+      {steps.map((s, i) => (
+        <li key={i}>
+          <Tex tex={s.tex} className="step-tex" />
+          <div className="step-note">{formatNote(s, t, lang === 'ar' ? '، ' : ', ')}</div>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 const EXAMPLES = ['f(x) = sin(x)', 'y = x^2 - 3', 'x^2 + y^2 = 9', 'a x^2 + b', 'Solve(x^2 - 2x = 3)', 'A = (1, 2)'];
@@ -135,11 +153,14 @@ function AlgebraItem({ r }: { r: Resolved }) {
   const selected = useStore((s) => s.selectedId === obj.id);
   const editing = useStore((s) => s.editingId === obj.id);
   const mode = useStore((s) => s.mode);
+  const exactDefault = useStore((s) => s.settings.exact);
   const [draft, setDraft] = useState(obj.input);
   const [menu, setMenu] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(!!r.stepsOpen);
   const st = useStore.getState;
 
   useEffect(() => { if (editing) setDraft(obj.input); }, [editing, obj.input]);
+  useEffect(() => { if (r.stepsOpen) setStepsOpen(true); }, [r.stepsOpen]);
 
   const submit = (v: string) => {
     if (v.trim() && v.trim() !== obj.input) st().updateInput(obj.id, v);
@@ -149,6 +170,8 @@ function AlgebraItem({ r }: { r: Resolved }) {
 
   const isSlider = r.value?.type === 'number' && r.value.slider && obj.slider;
   const only3d = mode !== '3d' && is3DOnly(r.value);
+  const exact = r.exact;
+  const approx = obj.approx ?? !exactDefault;
 
   return (
     <div className={`alg-item ${selected ? 'selected' : ''}`} onClick={() => { st().select(obj.id); st().setEditing(obj.id); }}>
@@ -168,7 +191,23 @@ function AlgebraItem({ r }: { r: Resolved }) {
         ) : (
           <Tex tex={r.tex} />
         )}
-        {r.display && !editing && <div className="alg-value"><span>{r.display}</span></div>}
+        {r.display && !editing && (
+          <div className="alg-value">
+            <span>{exact && !approx ? exact : r.display}</span>
+            {exact && (
+              <button className={`approx-btn ${approx ? 'on' : ''}`} aria-pressed={approx} aria-label={approx ? t('showExact') : t('showDecimal')}
+                title={approx ? t('showExact') : t('showDecimal')}
+                onClick={(e) => { e.stopPropagation(); st().liveUpdate(obj.id, { approx: !approx }); }}>≈</button>
+            )}
+          </div>
+        )}
+        {r.steps && !editing && (
+          <button className={`steps-btn ${stepsOpen ? 'on' : ''}`} aria-expanded={stepsOpen}
+            onClick={(e) => { e.stopPropagation(); setStepsOpen(!stepsOpen); }}>
+            {stepsOpen ? t('steps.hide') : t('steps.show')}
+          </button>
+        )}
+        {r.steps && stepsOpen && !editing && <StepsList r={r} />}
         {r.error && <div className="alg-error">{r.error}</div>}
         {only3d && <div className="alg-note">◇ {t('onlyIn3d')}</div>}
         {isSlider && !editing && <SliderRow r={r} />}
