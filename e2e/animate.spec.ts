@@ -1,4 +1,4 @@
-import { addInput, downloadBytes, drawerAction, expect, open, setMode, showPanel, state, test, type Page } from './helpers';
+import { addInput, downloadBytes, drawerAction, expect, open, openSettings, setLanguage, setMode, showPanel, state, test, type Page } from './helpers';
 
 test.beforeEach(async ({ page }) => open(page));
 
@@ -25,10 +25,10 @@ test('polar curves and points, polar grid, and polar curves in 3D', async ({ pag
   await expect(page.locator('.alg-value').nth(2)).toHaveText('(2.1213, 2.1213)');
   expect((await state(page)).objects.map((o) => o.name)).toEqual(['f', 'g', 'A']);
 
-  await page.getByRole('button', { name: 'Settings' }).first().click();
-  await page.locator('.modal label', { hasText: 'Polar grid' }).locator('input').check();
-  await page.locator('.modal .pill-btn').click();
-  expect(await store<boolean>(page, 's => s.settings.polarGrid')).toBe(true);
+  await openSettings(page, 'Graphics');
+  await page.getByLabel('Grid type').selectOption('polar');
+  await page.keyboard.press('Escape');
+  expect(await store<string>(page, 's => s.settings.gridType')).toBe('polar');
 
   await setMode(page, '3D Graphing');
   await addInput(page, 'r = 1 + cos(θ)');
@@ -150,7 +150,7 @@ test('recording can be stopped with the button, also in 3D', async ({ page }) =>
 });
 
 test('animation controls in Arabic', async ({ page }) => {
-  await page.locator('.topbar .pill-btn').click();
+  await setLanguage(page, 'ar');
   await addInput(page, 'a x');
   await expect(page.locator('.anim-bar button').first()).toHaveText('تشغيل الكل');
   await openMenu(page, 0);

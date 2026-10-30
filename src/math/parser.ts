@@ -1,8 +1,10 @@
 import type { RelOp } from './types';
+import { COMMAND_TABLE, commandCategory } from './commands';
 
 /** Convert keyboard / pretty symbols into parser-friendly ASCII. */
 export function normalize(s: string): string {
   return s
+    .replace(/[⁦-⁩]/g, '')
     .replace(/π/g, 'pi')
     .replace(/[×·⋅∙]/g, '*')
     .replace(/÷/g, '/')
@@ -134,19 +136,7 @@ export function splitDefinition(input: string): Definition {
 
 export type Category = 'point' | 'function' | 'number' | 'equation' | 'list' | 'path' | 'surface' | 'text';
 
-const COMMAND_CAT: Record<string, Category> = {
-  Solve: 'text', NSolve: 'text', Simplify: 'function', Expand: 'function',
-  Roots: 'list', Extremum: 'list', Intersect: 'list',
-  Derivative: 'function', Integral: 'function', Tangent: 'path',
-  Segment: 'path', Line: 'path', Ray: 'path', Vector: 'path', Circle: 'path', Polygon: 'path',
-  Midpoint: 'point', Reflect: 'point', Rotate: 'point', Translate: 'point',
-  Perpendicular: 'path', Parallel: 'path', PerpendicularBisector: 'path',
-  Distance: 'number', Angle: 'number', Area: 'number', Length: 'number', Slope: 'number',
-  Curve: 'path', Surface: 'surface', Sphere: 'surface',
-  FitLine: 'function', FitPoly: 'function', FitExp: 'function', FitLog: 'function', FitPow: 'function', FitSin: 'function',
-};
-
-export const COMMANDS = Object.keys(COMMAND_CAT);
+export const COMMANDS = COMMAND_TABLE.map((c) => c.name);
 
 /** Rough category used for auto-naming before evaluation. */
 export function categorize(input: string): Category {
@@ -155,8 +145,7 @@ export function categorize(input: string): Category {
   if (d.params) return d.params.length === 1 ? 'function' : 'surface';
   const cmd = asCommand(body);
   if (cmd) {
-    if (cmd.name === 'Integral' && cmd.args.length >= 3) return 'number';
-    return COMMAND_CAT[cmd.name] ?? 'text';
+    return commandCategory(cmd.name, cmd.args) ?? 'text';
   }
   const tup = asTuple(body);
   if (tup) return tup.length === 3 ? 'surface' : 'point';

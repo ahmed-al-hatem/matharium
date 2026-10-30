@@ -4,10 +4,12 @@ import { useResolved } from '../store/resolved';
 import { asPolar, splitDefinition } from '../math/parser';
 import { useTraceRecorder } from '../store/animate';
 import { fmtPt } from '../math/solve';
+import { canHostPoint, paramOf, pointAt } from '../math/geometry';
 import type { Resolved, Value, Vec2 } from '../math/types';
 import { draw, type Overlay } from './renderer';
 import { SvgCtx } from './svgctx';
-import { niceStep, Viewport } from './viewport';
+import { Viewport } from './viewport';
+import { snapPoint } from './grid';
 import { hitTest } from './hit';
 import { exporters } from '../io/fileio';
 import { useT } from '../i18n/i18n';
@@ -20,6 +22,7 @@ const isCurve = (v: Value) => v.type !== 'point' && v.type !== 'number' && v.typ
 
 export const TOOL_SPECS: Partial<Record<ToolId, ToolSpec>> = {
   point: { needs: ['pt'] },
+  pointOn: { needs: ['obj'] },
   segment: { needs: ['pt', 'pt'], make: ([a, b]) => `Segment(${a}, ${b})`, shape: 'segment' },
   line: { needs: ['pt', 'pt'], make: ([a, b]) => `Line(${a}, ${b})`, shape: 'line' },
   ray: { needs: ['pt', 'pt'], make: ([a, b]) => `Ray(${a}, ${b})`, shape: 'ray' },
@@ -38,6 +41,7 @@ export const TOOL_SPECS: Partial<Record<ToolId, ToolSpec>> = {
 };
 
 const nameOf = (r: Resolved) => splitDefinition(r.obj.input).name ?? r.obj.name;
+const draggable = (v?: Value) => v?.type === 'point' && (v.free || !!v.on);
 
 export function Canvas2D() {
   const wrap = useRef<HTMLDivElement>(null);
@@ -46,6 +50,7 @@ export function Canvas2D() {
   const items = useResolved();
   const view = useStore((s) => s.view);
   const settings = useStore((s) => s.settings);
+  const mode = useStore((s) => s.mode);
   const selectedId = useStore((s) => s.selectedId);
   const tool = useStore((s) => s.tool);
   const traces = useStore((s) => s.traces);
@@ -80,10 +85,10 @@ export function Canvas2D() {
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw(ctx, items, {
-      W: size.W, H: size.H, view, settings, selectedId, traces,
+      W: size.W, H: size.H, view, settings, selectedId, mode, traces,
       overlay: { hover, pending: pending.map((p) => p.p), mouse, toolShape: spec?.shape ?? null },
     });
-  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady, traces]);
+  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady, mode, traces]);
 
   // exporters
   useEffect(() => {
@@ -92,15 +97,15 @@ export function Canvas2D() {
       c.width = size.W * 2; c.height = size.H * 2;
       const ctx = c.getContext('2d')!;
       ctx.scale(2, 2);
-      draw(ctx, items, { W: size.W, H: size.H, view, settings, selectedId: null, traces });
+      draw(ctx, items, { W: size.W, H: size.H, view, settings, selectedId: null, mode, traces });
       return c.toDataURL('image/png');
     };
     exporters.svg = () => {
       const s = new SvgCtx(size.W, size.H);
-      draw(s, items, { W: size.W, H: size.H, view, settings, selectedId: null, traces });
+      draw(s, items, { W: size.W, H: size.H, view, settings, selectedId: null, mode, traces });
       return s.toString();
     };
-  }, [items, view, settings, size, traces]);
+  }, [items, view, settings, size, mode, traces]);
 
   const local = (e: { clientX: number; clientY: number }) => {
     const r = canvas.current!.getBoundingClientRect();
@@ -109,10 +114,7 @@ export function Canvas2D() {
 
   const snapW = (p: Vec2): Vec2 => {
     if (!settings.snap) return { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
-    const sx = niceStep(view.sx).minor, sy = niceStep(view.sy).minor;
-    const q = { x: Math.round(p.x / sx) * sx, y: Math.round(p.y / sy) * sy };
-    const close = Math.hypot((q.x - p.x) * view.sx, (q.y - p.y) * view.sy) < 10;
-    return close ? { x: +q.x.toFixed(6), y: +q.y.toFixed(6) } : { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
+    return snapPoint(p, view, settings.gridType);
   };
 
   const store = useStore.getState;
@@ -140,6 +142,15 @@ export function Canvas2D() {
     if (tool === 'slider') {
       st.addObject(`${freeSliderName()} = 1`, { slider: { min: -5, max: 5, step: 0.1 } });
       st.setPanel('algebra');
+      return;
+    }
+    if (tool === 'pointOn') {
+      const hit = hitTest(items, vp, px, py, canHostPoint);
+      if (!hit?.value) { st.notify('pickObject'); return; }
+      const t = +paramOf(hit.value, { x: vp.wx(px), y: vp.wy(py) }).toFixed(6);
+      const name = st.addObject(`Point(${nameOf(hit)}, ${t})`);
+      const created = store().objects.find((o) => o.name === name);
+      if (created) st.select(created.id);
       return;
     }
     if (!spec) return;
@@ -185,7 +196,7 @@ export function Canvas2D() {
     }
     if (tool !== 'move') { toolClick(px, py); return; }
     const hit = hitTest(items, vp, px, py);
-    if (hit?.value?.type === 'point' && hit.value.free) {
+    if (hit && draggable(hit.value)) {
       beginLive();
       drag.current = { kind: 'point', id: hit.obj.id, sx: px, sy: py, view, moved: false };
       store().select(hit.obj.id);
@@ -215,14 +226,23 @@ export function Canvas2D() {
       } else if (d.id) {
         const o = store().objects.find((x) => x.id === d.id);
         if (!o) return;
+        const named = splitDefinition(o.input).name;
+        const pv = items.find((r) => r.obj.id === o.id)?.value;
+        if (pv?.type === 'point' && pv.on) {
+          // a point on an object slides along it: keep the object, store the nearest parameter
+          const t = +paramOf(pv.on.target, w).toFixed(6);
+          const q = pointAt(pv.on.target, t);
+          if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) return;
+          store().liveUpdate(o.id, { input: `${named ? `${named} = ` : ''}Point(${pv.on.src}, ${t})` });
+          setHover({ p: q, color: o.color, text: `${o.name} ${fmtPt(q, 2)}` });
+          return;
+        }
         const p = snapW(w);
-        const def = splitDefinition(o.input);
-        const named = def.name ? `${def.name} = ` : '';
         // a polar point stays polar: (r; θ°)
-        const coords = asPolar(def.body)
+        const coords = asPolar(splitDefinition(o.input).body)
           ? `(${+Math.hypot(p.x, p.y).toFixed(4)}; ${+((Math.atan2(p.y, p.x) * 180) / Math.PI).toFixed(2)}°)`
           : `(${p.x}, ${p.y})`;
-        store().liveUpdate(o.id, { input: `${named}${coords}` });
+        store().liveUpdate(o.id, { input: `${named ? `${named} = ` : ''}${coords}` });
         setHover({ p, color: o.color, text: `${o.name} ${fmtPt(p, 2)}` });
       }
       return;
@@ -240,7 +260,7 @@ export function Canvas2D() {
         setHover({ p, color: hit.obj.color, text: fmtPt(p, 4) });
       }
     } else if (hover) setHover(null);
-    canvas.current!.style.cursor = tool !== 'move' ? 'crosshair' : hit?.value?.type === 'point' && hit.value.free ? 'grab' : 'default';
+    canvas.current!.style.cursor = tool !== 'move' ? 'crosshair' : draggable(hit?.value) ? 'grab' : 'default';
   }
 
   function onPointerUp(e: React.PointerEvent) {

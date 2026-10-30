@@ -1,8 +1,10 @@
 import type { Resolved, Value, Vec2, Vec3 } from '../math/types';
-import type { Settings, View } from '../store/project';
+import { labelDefault, type Mode, type Settings, type View } from '../store/project';
 import { fmt } from '../math/solve';
+import { riemannStrip } from '../math/calculus';
 import { march } from './march';
 import { fmtTick, niceStep, Viewport } from './viewport';
+import { isoSide, POLAR_ANGLE, polarStep } from './grid';
 
 /** The subset of CanvasRenderingContext2D the renderer uses (also implemented by SvgCtx). */
 export interface Ctx {
@@ -38,11 +40,17 @@ export const C = {
   bright: '#DCDCDC',
   gridMinor: 'rgba(120,121,120,0.10)',
   gridMajor: 'rgba(120,121,120,0.24)',
+  gridDot: 'rgba(120,121,120,0.6)',
   accent: '#3282F6',
 };
 
-export const FONT_MONO = "11px 'JetBrains Mono', monospace";
-export const FONT_LABEL = "italic 16px 'STIX Two Text', 'EB Garamond', serif";
+// rescaled by draw() to follow the font-size setting (14px = 1)
+let FONT_MONO = "11px 'JetBrains Mono', monospace";
+let FONT_LABEL = "italic 16px 'STIX Two Text', 'EB Garamond', serif";
+function setFontScale(k: number) {
+  FONT_MONO = `${+(11 * k).toFixed(1)}px 'JetBrains Mono', monospace`;
+  FONT_LABEL = `italic ${+(16 * k).toFixed(1)}px 'STIX Two Text', 'EB Garamond', serif`;
+}
 
 export interface Overlay {
   hover?: { p: Vec2; color: string; text: string } | null;
@@ -55,6 +63,8 @@ export interface DrawOpts {
   W: number; H: number; view: View; settings: Settings; selectedId: string | null; overlay?: Overlay;
   /** positions left behind by traced points */
   traces?: Record<string, Vec3[]>;
+  /** For the automatic label rule (Geometry labels everything); defaults to graphing. */
+  mode?: Mode;
 }
 
 function drawTraces(ctx: Ctx, vp: Viewport, items: Resolved[], traces: Record<string, Vec3[]>) {
@@ -78,40 +88,17 @@ function drawTraces(ctx: Ctx, vp: Viewport, items: Resolved[], traces: Record<st
   ctx.globalAlpha = 1;
 }
 
-/** Circles around the origin and rays every 15° (major every 30°). */
-function drawPolarGrid(ctx: Ctx, vp: Viewport) {
-  const { step, minor } = niceStep(Math.min(vp.v.sx, vp.v.sy));
-  const ox = vp.px(0), oy = vp.py(0);
-  const rmax = Math.max(...[[vp.xmin, vp.ymin], [vp.xmin, vp.ymax], [vp.xmax, vp.ymin], [vp.xmax, vp.ymax]].map(([x, y]) => Math.hypot(x, y)));
-  const rmin = Math.hypot(Math.max(vp.xmin, Math.min(0, vp.xmax)), Math.max(vp.ymin, Math.min(0, vp.ymax)));
-  ctx.lineWidth = 1;
-  for (const [st, color] of [[minor, C.gridMinor], [step, C.gridMajor]] as const) {
-    ctx.strokeStyle = color;
-    for (let r = Math.max(st, Math.ceil(rmin / st) * st), n = 0; r <= rmax && n < 400; r += st, n++) {
-      ctx.beginPath(); ctx.ellipse(ox, oy, r * vp.v.sx, r * vp.v.sy, 0, 0, Math.PI * 2); ctx.stroke();
-    }
-  }
-  for (let k = 0; k < 24; k++) {
-    const a = (k * Math.PI) / 12;
-    ctx.strokeStyle = k % 2 ? C.gridMinor : C.gridMajor;
-    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + rmax * vp.v.sx * Math.cos(a), oy - rmax * vp.v.sy * Math.sin(a)); ctx.stroke();
-  }
-}
-
 function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
-  const { step, minor } = niceStep(vp.v.sx);
+  const { step } = niceStep(vp.v.sx);
   const ys = niceStep(vp.v.sy);
   const line = (x1: number, y1: number, x2: number, y2: number) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
-  if (s.grid && s.polarGrid) drawPolarGrid(ctx, vp);
-  else if (s.grid) {
+  if (s.grid) {
     ctx.lineWidth = 1;
-    for (const [st, color] of [[minor, C.gridMinor], [step, C.gridMajor]] as const) {
-      ctx.strokeStyle = color;
-      for (let x = Math.ceil(vp.xmin / st) * st; x <= vp.xmax; x += st) { const p = Math.round(vp.px(x)) + 0.5; line(p, 0, p, vp.H); }
-    }
-    for (const [st, color] of [[ys.minor, C.gridMinor], [ys.step, C.gridMajor]] as const) {
-      ctx.strokeStyle = color;
-      for (let y = Math.ceil(vp.ymin / st) * st; y <= vp.ymax; y += st) { const p = Math.round(vp.py(y)) + 0.5; line(0, p, vp.W, p); }
+    switch (s.gridType) {
+      case 'polar': polarGrid(ctx, vp, s); break;
+      case 'isometric': isoGrid(ctx, vp); break;
+      case 'dots': dotGrid(ctx, vp); break;
+      default: lineGrid(ctx, vp, s.gridType === 'major'); break;
     }
   }
   if (!s.axes) return;
@@ -127,9 +114,10 @@ function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
   ctx.beginPath(); ctx.moveTo(ay, 0); ctx.lineTo(ay - 4, 9); ctx.lineTo(ay + 4, 9); ctx.closePath(); ctx.fill();
   ctx.font = FONT_LABEL;
   ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-  ctx.fillText('x', vp.W - 6, ax + 8);
+  const names = s.axisLabels ?? { x: 'x', y: 'y' };
+  ctx.fillText(names.x, vp.W - 6, ax + 8);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('y', ay + 8, 4);
+  ctx.fillText(names.y, ay + 8, 4);
 
   ctx.font = FONT_MONO;
   ctx.fillStyle = C.axis;
@@ -157,6 +145,113 @@ function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
   }
 }
 
+/** Square grid: major lines, with the minor ones underneath unless majorOnly. */
+function lineGrid(ctx: Ctx, vp: Viewport, majorOnly: boolean) {
+  const xs = niceStep(vp.v.sx), ys = niceStep(vp.v.sy);
+  const passes = (minor: number, major: number) => (majorOnly ? [[major, C.gridMajor]] : [[minor, C.gridMinor], [major, C.gridMajor]]) as [number, string][];
+  for (const [st, color] of passes(xs.minor, xs.step)) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    for (let x = Math.ceil(vp.xmin / st) * st; x <= vp.xmax; x += st) { const p = Math.round(vp.px(x)) + 0.5; ctx.moveTo(p, 0); ctx.lineTo(p, vp.H); }
+    ctx.stroke();
+  }
+  for (const [st, color] of passes(ys.minor, ys.step)) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    for (let y = Math.ceil(vp.ymin / st) * st; y <= vp.ymax; y += st) { const p = Math.round(vp.py(y)) + 0.5; ctx.moveTo(0, p); ctx.lineTo(vp.W, p); }
+    ctx.stroke();
+  }
+}
+
+/** Dots at the minor grid intersections, larger at the major ones. */
+function dotGrid(ctx: Ctx, vp: Viewport) {
+  const xs = niceStep(vp.v.sx), ys = niceStep(vp.v.sy);
+  const near = (v: number, st: number) => Math.abs(v / st - Math.round(v / st)) < 1e-6;
+  for (let x = Math.ceil(vp.xmin / xs.minor) * xs.minor; x <= vp.xmax; x += xs.minor) {
+    const px = Math.round(vp.px(x));
+    for (let y = Math.ceil(vp.ymin / ys.minor) * ys.minor; y <= vp.ymax; y += ys.minor) {
+      const major = near(x, xs.step) && near(y, ys.step);
+      const r = major ? 1.5 : 0.75;
+      ctx.fillStyle = major ? C.gridDot : C.gridMajor;
+      ctx.fillRect(px - r, Math.round(vp.py(y)) - r, 2 * r, 2 * r);
+    }
+  }
+}
+
+/** Concentric circles around the origin and rays every 30°, labelled in the angle unit. */
+function polarGrid(ctx: Ctx, vp: Viewport, s: Settings) {
+  const { step, minor } = polarStep(vp.v);
+  const ox = vp.px(0), oy = vp.py(0);
+  // the world distance from the origin to the nearest and farthest points of the view
+  const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+  const rIn = Math.hypot(clamp(0, vp.xmin, vp.xmax), clamp(0, vp.ymin, vp.ymax));
+  const rOut = Math.max(...[[vp.xmin, vp.ymin], [vp.xmin, vp.ymax], [vp.xmax, vp.ymin], [vp.xmax, vp.ymax]].map(([x, y]) => Math.hypot(x, y)));
+  for (const [st, color] of [[minor, C.gridMinor], [step, C.gridMajor]] as const) {
+    const k0 = Math.max(1, Math.floor(rIn / st)), k1 = Math.ceil(rOut / st);
+    if (k1 - k0 > 400) continue;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    for (let k = k0; k <= k1; k++) {
+      const rx = k * st * vp.v.sx, ry = k * st * vp.v.sy;
+      ctx.moveTo(ox + rx, oy);
+      ctx.ellipse(ox, oy, rx, ry, 0, 0, Math.PI * 2);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = C.gridMajor;
+  ctx.beginPath();
+  for (let a = 0; a < 12; a++) {
+    const t = a * POLAR_ANGLE, R = rOut * 1.01;
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(vp.px(R * Math.cos(t)), vp.py(R * Math.sin(t)));
+  }
+  ctx.stroke();
+  // angle labels where each ray leaves the view (only when the origin is on screen)
+  const pad = 26;
+  if (ox < pad || ox > vp.W - pad || oy < pad || oy > vp.H - pad) return;
+  ctx.font = FONT_MONO;
+  ctx.fillStyle = C.axis;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let a = 1; a < 12; a++) {
+    if (a % 3 === 0) continue; // the axes have their own labels
+    const dx = Math.cos(a * POLAR_ANGLE) * vp.v.sx, dy = -Math.sin(a * POLAR_ANGLE) * vp.v.sy;
+    const L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+    const t = Math.min(ux > 0 ? (vp.W - pad - ox) / ux : (pad - ox) / ux, uy > 0 ? (vp.H - pad - oy) / uy : (pad - oy) / uy);
+    halo(ctx, angleLabel(a, s.angle), ox + ux * t, oy + uy * t);
+  }
+}
+
+/** a·30° as "30°" or as a multiple of π ("π/6", "5π/6"). */
+function angleLabel(a: number, unit: Settings['angle']) {
+  if (unit === 'deg') return `${a * 30}°`;
+  const gcd = (p: number, q: number): number => (q ? gcd(q, p % q) : p);
+  const g = gcd(a, 6), num = a / g, den = 6 / g;
+  return `${num === 1 ? '' : num}π${den === 1 ? '' : `/${den}`}`;
+}
+
+/** Triangular grid: horizontal lines and lines at 60° and 120° through the isometric lattice. */
+function isoGrid(ctx: Ctx, vp: Viewport) {
+  const sd = isoSide(vp.v), h = (sd * Math.sqrt(3)) / 2, k = 1 / Math.sqrt(3);
+  const { xmin, xmax, ymin, ymax } = vp;
+  ctx.strokeStyle = C.gridMajor;
+  ctx.beginPath();
+  for (let j = Math.ceil(ymin / h); j * h <= ymax; j++) {
+    const p = vp.py(j * h); ctx.moveTo(0, p); ctx.lineTo(vp.W, p);
+  }
+  // a 60° line is x - y/√3 = c and a 120° line is x + y/√3 = c, with c a multiple of the side
+  for (const sign of [-1, 1]) {
+    const cs = [xmin + sign * ymin * k, xmin + sign * ymax * k, xmax + sign * ymin * k, xmax + sign * ymax * k];
+    const c0 = Math.ceil(Math.min(...cs) / sd), c1 = Math.floor(Math.max(...cs) / sd);
+    if (c1 - c0 > 2000) continue;
+    for (let i = c0; i <= c1; i++) {
+      const c = i * sd;
+      ctx.moveTo(vp.px(c - sign * ymin * k), vp.py(ymin));
+      ctx.lineTo(vp.px(c - sign * ymax * k), vp.py(ymax));
+    }
+  }
+  ctx.stroke();
+}
+
 function halo(ctx: Ctx, t: string, x: number, y: number) {
   const fill = ctx.fillStyle;
   const w = ctx.measureText(t).width;
@@ -174,6 +269,8 @@ function plotFn(ctx: Ctx, f: (x: number) => number, vp: Viewport, from = 0, to =
   ctx.beginPath();
   let pen = false, prev = 0;
   const step = 0.75;
+  // only the visible part: an integral's ends can be millions of pixels apart when zoomed in
+  from = Math.max(from, 0); to = Math.min(to, vp.W);
   for (let px = from - 1; px <= to + 1; px += step) {
     const y = f(vp.wx(px));
     if (!Number.isFinite(y)) { pen = false; continue; }
@@ -309,6 +406,100 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
       labels.push({ p: { x: mx, y: v.f(mx) / 2 }, text: `${name} = ${fmt(v.value, 3)}`, color });
       return;
     }
+    case 'riemann': {
+      const h = (v.b - v.a) / v.n;
+      const cy = (y: number) => Math.max(-10, Math.min(vp.H + 10, vp.py(y)));
+      const y0 = cy(0);
+      ctx.beginPath();
+      for (let i = 0; i < v.n; i++) {
+        const x0 = vp.px(v.a + i * h), x1 = vp.px(v.a + (i + 1) * h);
+        if (Math.max(x0, x1) < 0 || Math.min(x0, x1) > vp.W) continue;
+        const [ya, yb] = riemannStrip(v.f, v.a, h, i, v.rule);
+        if (!Number.isFinite(ya) || !Number.isFinite(yb)) continue;
+        ctx.moveTo(x0, y0); ctx.lineTo(x0, cy(ya)); ctx.lineTo(x1, cy(yb)); ctx.lineTo(x1, y0); ctx.closePath();
+      }
+      ctx.globalAlpha = 0.22; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.lineWidth = 1; ctx.stroke(); ctx.lineWidth = width;
+      plotFn(ctx, v.f, vp, vp.px(Math.min(v.a, v.b)), vp.px(Math.max(v.a, v.b)));
+      const mx = (v.a + v.b) / 2;
+      labels.push({ p: { x: mx, y: v.f(mx) / 2 }, text: `${name} = ${fmt(v.value, 4)}`, color });
+      return;
+    }
+    case 'between': {
+      const a = vp.px(Math.min(v.a, v.b)), b = vp.px(Math.max(v.a, v.b));
+      const cy = (y: number) => Math.max(-10, Math.min(vp.H + 10, vp.py(y)));
+      ctx.globalAlpha = 0.28;
+      for (let px = Math.max(0, a); px < Math.min(vp.W, b); px += 1) {
+        const x = vp.wx(px + 0.5), y1 = v.f(x), y2 = v.g(x);
+        if (!Number.isFinite(y1) || !Number.isFinite(y2)) continue;
+        ctx.fillRect(px, Math.min(cy(y1), cy(y2)), 1, Math.abs(cy(y1) - cy(y2)));
+      }
+      ctx.globalAlpha = 1;
+      plotFn(ctx, v.f, vp, a, b);
+      plotFn(ctx, v.g, vp, a, b);
+      const mx = (v.a + v.b) / 2;
+      labels.push({ p: { x: mx, y: (v.f(mx) + v.g(mx)) / 2 }, text: `${name} = ${fmt(v.value, 3)}`, color });
+      return;
+    }
+    case 'slopefield': {
+      const gap = 30, half = 10;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let py = gap / 2; py < vp.H; py += gap) for (let px = gap / 2; px < vp.W; px += gap) {
+        const m = v.F(vp.wx(px), vp.wy(py));
+        if (Number.isNaN(m)) continue;
+        // direction (1, m) in world units, then to screen
+        let dx = vp.v.sx, dy = Number.isFinite(m) ? -m * vp.v.sy : -vp.v.sy * 1e9 * Math.sign(m);
+        const L = Math.hypot(dx, dy);
+        dx = (dx / L) * half; dy = (dy / L) * half;
+        ctx.moveTo(px - dx, py - dy); ctx.lineTo(px + dx, py + dy);
+      }
+      ctx.stroke();
+      return;
+    }
+    case 'bars': {
+      const cy = (y: number) => Math.max(-10, Math.min(vp.H + 10, vp.py(y)));
+      const y0 = cy(0);
+      for (const hi of [false, true]) {
+        ctx.beginPath();
+        for (const b of v.bars) {
+          if (!!b.hi !== hi) continue;
+          const x0 = vp.px(b.x0), x1 = vp.px(b.x1);
+          ctx.moveTo(x0, y0); ctx.lineTo(x0, cy(b.h)); ctx.lineTo(x1, cy(b.h)); ctx.lineTo(x1, y0); ctx.closePath();
+        }
+        ctx.globalAlpha = hi ? 0.6 : 0.22; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.lineWidth = 1.2; ctx.stroke();
+      }
+      const top = v.bars.filter((b) => b.hi);
+      if (v.value !== undefined && top.length) {
+        labels.push({ p: { x: top[0].x0, y: Math.max(...top.map((b) => b.h)) }, text: `${name} = ${fmt(v.value, 4)}`, color });
+      }
+      return;
+    }
+    case 'boxplot': {
+      const [mn, q1, md, q3, mx] = v.s.map((x) => vp.px(x));
+      const yc = vp.py(v.y), hh = Math.min(30, 0.4 * vp.v.sy);
+      ctx.beginPath();
+      ctx.moveTo(q1, yc - hh); ctx.lineTo(q3, yc - hh); ctx.lineTo(q3, yc + hh); ctx.lineTo(q1, yc + hh); ctx.closePath();
+      ctx.globalAlpha = 0.22; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.moveTo(md, yc - hh); ctx.lineTo(md, yc + hh);
+      ctx.moveTo(mn, yc); ctx.lineTo(q1, yc); ctx.moveTo(q3, yc); ctx.lineTo(mx, yc);
+      ctx.moveTo(mn, yc - hh / 2); ctx.lineTo(mn, yc + hh / 2); ctx.moveTo(mx, yc - hh / 2); ctx.lineTo(mx, yc + hh / 2);
+      ctx.stroke();
+      return;
+    }
+    case 'polyline': {
+      ctx.beginPath();
+      let pen = false;
+      for (const p of v.pts) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) { pen = false; continue; }
+        const x = Math.max(-1e4, Math.min(vp.W + 1e4, vp.px(p.x))), y = Math.max(-1e4, Math.min(vp.H + 1e4, vp.py(p.y)));
+        if (pen) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        pen = true;
+      }
+      ctx.stroke();
+      break;
+    }
     case 'curve': {
       ctx.beginPath();
       let pen = false, lx = 0, ly = 0;
@@ -356,6 +547,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
   ctx.fillRect(0, 0, o.W, o.H);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  setFontScale((o.settings.fontSize ?? 14) / 14);
   drawGrid(ctx, vp, o.settings);
   if (o.traces) drawTraces(ctx, vp, items, o.traces);
 
@@ -367,8 +559,8 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
     if (!v || !obj.visible) continue;
     const selected = o.selectedId === obj.id;
     const width = (obj.lineWidth ?? 2.5) + (selected ? 1 : 0);
-    const showLabel = obj.showLabel ?? o.settings.labels;
-    if (v.type === 'point') { points.push({ p: v.p, color: obj.color, name: obj.name, free: v.free, selected, label: showLabel }); continue; }
+    const showLabel = obj.showLabel ?? labelDefault(o.settings, o.mode ?? 'graphing', v.type === 'point');
+    if (v.type === 'point') { points.push({ p: v.p, color: obj.color, name: obj.name, free: v.free || !!v.on, selected, label: showLabel }); continue; }
     if (v.type === 'points') { v.pts.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, label: false })); continue; }
     if (v.type === 'text') { v.pts?.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, hollow: true, label: false })); continue; }
     if (selected) {

@@ -11,6 +11,7 @@ const S = ({ children }: { children: ReactNode }) => (
 const ICONS: Record<ToolId, ReactNode> = {
   move: <S><path d="M10 6v17l4.5-4.5 3 7 3-1.3-3-6.8H24z" fill={G} stroke="none" /></S>,
   point: <S>{dot(16, 16)}<path d="M20 12l4-4" stroke={G} /></S>,
+  pointOn: <S><circle cx={16} cy={18} r={9} stroke={MU} />{dot(22.4, 11.6)}</S>,
   segment: <S><path d="M7 24 25 8" stroke={CO} />{dot(7, 24)}{dot(25, 8)}</S>,
   line: <S><path d="M3 27 29 5" stroke={CO} />{dot(10, 21)}{dot(22, 11)}</S>,
   ray: <S><path d="M7 24 29 6" stroke={CO} />{dot(7, 24)}{dot(18, 15)}</S>,
@@ -31,7 +32,7 @@ const ICONS: Record<ToolId, ReactNode> = {
 };
 
 const GROUPS: { key: string; tools: ToolId[] }[] = [
-  { key: 'group.basic', tools: ['move', 'point', 'slider', 'delete'] },
+  { key: 'group.basic', tools: ['move', 'point', 'pointOn', 'slider', 'delete'] },
   { key: 'group.lines', tools: ['segment', 'line', 'ray', 'vector', 'polygon'] },
   { key: 'group.construct', tools: ['circle', 'circle3', 'midpoint', 'perpendicular', 'parallel', 'bisector', 'intersect', 'tangent'] },
   { key: 'group.measure', tools: ['distance', 'angle'] },

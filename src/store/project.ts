@@ -9,15 +9,26 @@ export const EXTRA_COLORS = ['#DCDCDC', '#B07CE8', '#E87CB0', '#8FCB5A'];
 export type Mode = 'graphing' | 'geometry' | '3d';
 export type Panel = 'algebra' | 'tools' | 'table' | 'spreadsheet';
 export type ToolId =
-  | 'move' | 'point' | 'segment' | 'line' | 'ray' | 'vector' | 'polygon' | 'circle' | 'circle3'
+  | 'move' | 'point' | 'pointOn' | 'segment' | 'line' | 'ray' | 'vector' | 'polygon' | 'circle' | 'circle3'
   | 'midpoint' | 'perpendicular' | 'parallel' | 'bisector' | 'intersect' | 'tangent'
   | 'distance' | 'angle' | 'slider' | 'delete';
 
 export interface View { ox: number; oy: number; sx: number; sy: number }
+export type LabelMode = 'auto' | 'points' | 'all' | 'none';
+export type SettingsTab = 'general' | 'graphics' | '3d';
+export const GRID_TYPES = ['majorMinor', 'major', 'polar', 'isometric', 'dots'] as const;
+export type GridType = (typeof GRID_TYPES)[number];
+export const PROJECTIONS = ['perspective', 'orthographic', 'oblique', 'anaglyph'] as const;
+export type Projection = (typeof PROJECTIONS)[number];
 export interface Settings {
-  grid: boolean; axes: boolean; labels: boolean; snap: boolean; digits: number; range3d: number; lang: 'en' | 'ar';
-  /** circles and rays instead of the square grid */
-  polarGrid?: boolean;
+  // 2D graphics
+  grid: boolean; axes: boolean; snap: boolean; axisLabels: { x: string; y: string }; gridType: GridType;
+  // general
+  labels: LabelMode; digits: number; sigFigs: boolean; angle: 'deg' | 'rad'; fontSize: number;
+  // 3D
+  axes3d: boolean; plane3d: boolean; grid3d: boolean; range3d: number; projection: Projection;
+  /** A device preference (localStorage), not saved with the project. */
+  lang: 'en' | 'ar';
 }
 
 interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
@@ -26,7 +37,7 @@ interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
 export interface Workspace { objects: MObj[]; sheet: Record<string, string>; view: View; table: TableCfg }
 
 export interface ProjectFile {
-  app: 'matharium'; version: 1; mode: Mode; view: View; settings: Settings;
+  app: 'matharium'; version: 3; mode: Mode; view: View; settings: Omit<Settings, 'lang'>;
   objects: MObj[]; sheet: Record<string, string>; table: TableCfg;
   /** The other modes' workspaces (the current mode's lives in the fields above). */
   workspaces?: Partial<Record<Mode, Workspace>>;
@@ -40,7 +51,36 @@ export const DEFAULT_VIEW: View = { ox: 0, oy: 0, sx: 50, sy: 50 };
 const DEFAULT_TABLE: TableCfg = { ids: [], start: -5, end: 5, step: 1 };
 
 interface ParkedWorkspace extends Workspace { past: Snapshot[]; future: Snapshot[] }
-const DEFAULT_SETTINGS: Settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en', polarGrid: false };
+export const DEFAULT_SETTINGS: Settings = {
+  grid: true, axes: true, snap: true, axisLabels: { x: 'x', y: 'y' }, gridType: 'majorMinor',
+  labels: 'auto', digits: 4, sigFigs: false, angle: 'rad', fontSize: 14,
+  axes3d: true, plane3d: true, grid3d: true, range3d: 6, projection: 'perspective', lang: 'en',
+};
+
+/** Bring settings from any file version up to the current one (v1 had boolean labels and shared 2D/3D axes and grid; v3 added grid type and projection). */
+export function migrateSettings(raw: Record<string, unknown> | undefined): Omit<Settings, 'lang'> {
+  const r = { ...(raw ?? {}) } as Record<string, unknown>;
+  if (typeof r.labels === 'boolean') r.labels = r.labels ? 'all' : 'none';
+  if (r.axes3d === undefined && typeof r.axes === 'boolean') r.axes3d = r.axes;
+  if (r.grid3d === undefined && typeof r.grid === 'boolean') r.grid3d = r.grid;
+  // session B's polar grid checkbox became a grid type
+  if (r.polarGrid === true && r.gridType === undefined) r.gridType = 'polar';
+  delete r.polarGrid;
+  if (!GRID_TYPES.includes(r.gridType as GridType)) delete r.gridType;
+  if (!PROJECTIONS.includes(r.projection as Projection)) delete r.projection;
+  const { lang: _lang, ...rest } = { ...DEFAULT_SETTINGS, ...r } as Settings;
+  return rest;
+}
+
+/** Whether an object shows its label when it has no explicit choice of its own. */
+export function labelDefault(s: Pick<Settings, 'labels'>, mode: Mode, isPoint: boolean) {
+  switch (s.labels) {
+    case 'all': return true;
+    case 'none': return false;
+    case 'points': return isPoint;
+    default: return mode === 'geometry' || isPoint;
+  }
+}
 
 interface State {
   mode: Mode;
@@ -53,7 +93,8 @@ interface State {
   selectedId: string | null;
   editingId: string | null;
   keyboardOpen: boolean;
-  settingsOpen: boolean;
+  /** The open Settings tab, or null when the dialog is closed. */
+  settingsTab: SettingsTab | null;
   table: TableCfg;
   past: Snapshot[];
   future: Snapshot[];
@@ -80,7 +121,9 @@ interface State {
   zoom(f: number): void;
   setSettings(s: Partial<Settings>): void;
   setKeyboard(open: boolean): void;
-  setSettingsOpen(open: boolean): void;
+  /** Open Settings on a tab (default: the one for the current mode). */
+  openSettings(tab?: SettingsTab): void;
+  closeSettings(): void;
   setTable(t: Partial<TableCfg>): void;
   notify(msg: string): void;
   setPwa(p: Partial<PwaState>): void;
@@ -166,7 +209,7 @@ export const useStore = create<State>((set, get) => {
     selectedId: null,
     editingId: null,
     keyboardOpen: false,
-    settingsOpen: false,
+    settingsTab: null,
     table: { ...DEFAULT_TABLE },
     past: [],
     future: [],
@@ -197,7 +240,7 @@ export const useStore = create<State>((set, get) => {
         editingId: null,
         tool: 'move',
         panel: mode === 'geometry' ? 'tools' : s.panel === 'table' || s.panel === 'spreadsheet' ? (mode === '3d' ? 'algebra' : s.panel) : s.panel ?? 'algebra',
-        settings: { ...s.settings, grid: mode !== 'geometry', axes: mode !== 'geometry' },
+        settings: mode === '3d' ? s.settings : { ...s.settings, grid: mode !== 'geometry', axes: mode !== 'geometry' },
         traces: {},
       });
     },
@@ -213,7 +256,8 @@ export const useStore = create<State>((set, get) => {
     },
     setSettings: (p) => set({ settings: { ...get().settings, ...p } }),
     setKeyboard: (keyboardOpen) => set({ keyboardOpen }),
-    setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+    openSettings: (tab) => set({ settingsTab: tab ?? (get().mode === '3d' ? '3d' : 'graphics') }),
+    closeSettings: () => set({ settingsTab: null }),
     setTable: (t) => set({ table: { ...get().table, ...t }, dirty: true }),
     notify(toast) {
       set({ toast });
@@ -343,7 +387,7 @@ export const useStore = create<State>((set, get) => {
         objects: p.objects ?? [],
         sheet: p.sheet ?? {},
         view: p.view ?? { ...DEFAULT_VIEW },
-        settings: { ...DEFAULT_SETTINGS, ...p.settings, lang: get().settings.lang },
+        settings: { ...migrateSettings(p.settings as Record<string, unknown> | undefined), lang: get().settings.lang },
         table: p.table ?? get().table,
         workspaces: Object.fromEntries(Object.entries(p.workspaces ?? {})
           .filter(([m]) => m !== (p.mode ?? 'graphing'))
@@ -367,8 +411,9 @@ export const useStore = create<State>((set, get) => {
       const workspaces = Object.fromEntries(Object.entries(s.workspaces)
         .filter(([, w]) => w.objects.length || Object.keys(w.sheet).length)
         .map(([m, w]) => [m, { objects: w.objects, sheet: w.sheet, view: w.view, table: w.table }]));
+      const { lang: _lang, ...settings } = s.settings;
       return {
-        app: 'matharium', version: 1, mode: s.mode, view: s.view, settings: s.settings, objects: s.objects, sheet: s.sheet, table: s.table,
+        app: 'matharium', version: 3, mode: s.mode, view: s.view, settings, objects: s.objects, sheet: s.sheet, table: s.table,
         ...(Object.keys(workspaces).length ? { workspaces } : {}),
       };
     },
