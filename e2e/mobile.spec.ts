@@ -38,8 +38,8 @@ test('phone: a long press on the graph opens its menu', async ({ page }) => {
   await page.waitForTimeout(650);
   await expect(page.locator('.ctx-menu')).toBeVisible();
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  // lifting the finger does not pick the item under it
-  await page.waitForTimeout(200);
+  // lifting the finger does not pick the item under it, and a quick tap right after still works
+  await page.waitForTimeout(50);
   await expect(page.locator('.ctx-menu')).toBeVisible();
   expect(await page.evaluate(() => (window as any).__matharium.getState().settings.axes)).toBe(true);
   await page.getByRole('menuitemcheckbox', { name: 'Show grid' }).tap();

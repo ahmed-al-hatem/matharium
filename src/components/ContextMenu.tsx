@@ -62,9 +62,11 @@ export function placeMenu(x: number, y: number, w: number, h: number, vw: number
 
 /** The finger that held a long press lifts with a click; keep it from also activating what is under it. */
 function swallowClick() {
-  const stop = (e: Event) => { e.stopPropagation(); e.preventDefault(); };
-  addEventListener('click', stop, { capture: true, once: true });
-  setTimeout(() => removeEventListener('click', stop, { capture: true }), 800);
+  const stop = (e: Event) => { e.stopPropagation(); e.preventDefault(); done(); };
+  // the next touch is a new gesture: from then on clicks count (the browser may not send one for the long press at all)
+  const done = () => { removeEventListener('click', stop, true); removeEventListener('pointerdown', done, true); };
+  addEventListener('click', stop, true);
+  addEventListener('pointerdown', done, true);
 }
 
 const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('input, textarea, select, [contenteditable="true"]');
@@ -135,9 +137,9 @@ function moveFocus(menu: HTMLElement, key: string, rtl: boolean): boolean {
   return false;
 }
 
-function MenuLevel({ entries, label, x, y, x2, flipUp, rtl, onClose, isSub, onBack, guard, autoFocus = true }: {
+function MenuLevel({ entries, label, x, y, x2, flipUp, rtl, onClose, isSub, onBack, autoFocus = true }: {
   entries: MenuEntry[]; label: string; x: number; y: number; x2?: number; flipUp: boolean; rtl: boolean;
-  onClose(restore: boolean): void; isSub?: boolean; onBack?(): void; guard(): boolean; autoFocus?: boolean;
+  onClose(restore: boolean): void; isSub?: boolean; onBack?(): void; autoFocus?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -188,7 +190,7 @@ function MenuLevel({ entries, label, x, y, x2, flipUp, rtl, onClose, isSub, onBa
               return (
                 <button key={i} role="menuitem" tabIndex={-1} data-row={r} aria-disabled={it.disabled || undefined} className={it.danger ? 'danger' : ''}
                   onMouseEnter={() => setSub(null)}
-                  onClick={() => { if (it.disabled || guard()) return; onClose(true); it.onSelect(); }}>
+                  onClick={() => { if (it.disabled) return; onClose(true); it.onSelect(); }}>
                   {it.icon ? <it.icon /> : <span className="icon" />}<span>{it.label}</span>
                 </button>
               );
@@ -196,7 +198,7 @@ function MenuLevel({ entries, label, x, y, x2, flipUp, rtl, onClose, isSub, onBa
               return (
                 <button key={i} role="menuitemcheckbox" tabIndex={-1} data-row={r} aria-checked={it.checked} className="ctx-check"
                   onMouseEnter={() => setSub(null)}
-                  onClick={() => { if (!guard()) it.onToggle(); }}>
+                  onClick={it.onToggle}>
                   <span className="ctx-box" aria-hidden="true">{it.checked && <Icon.check />}</span><span>{it.label}</span>
                 </button>
               );
@@ -209,7 +211,7 @@ function MenuLevel({ entries, label, x, y, x2, flipUp, rtl, onClose, isSub, onBa
                       <button key={o.id} role="menuitemradio" tabIndex={-1} data-row={r} aria-checked={o.selected} aria-label={o.label} title={o.label}
                         className={`${o.selected ? 'on' : ''} ${o.color ? 'swatch' : ''}`} style={o.color ? { background: o.color } : undefined}
                         onMouseEnter={() => setSub(null)}
-                        onClick={() => { if (!guard()) it.onPick(o.id); }}>
+                        onClick={() => it.onPick(o.id)}>
                         {o.icon && <o.icon />}
                       </button>
                     ))}
@@ -228,7 +230,7 @@ function MenuLevel({ entries, label, x, y, x2, flipUp, rtl, onClose, isSub, onBa
         })}
       </div>
       {sub && subEntry?.kind === 'submenu' && (
-        <MenuLevel key={sub.i} autoFocus={sub.focus} entries={subEntry.items} label={subEntry.label} rtl={rtl} isSub flipUp={false} guard={guard} onClose={onClose}
+        <MenuLevel key={sub.i} autoFocus={sub.focus} entries={subEntry.items} label={subEntry.label} rtl={rtl} isSub flipUp={false} onClose={onClose}
           x={rtl ? sub.rect.left : sub.rect.right} x2={rtl ? sub.rect.right : sub.rect.left} y={sub.rect.top - 6}
           onBack={() => { const i = sub.i; setSub(null); ref.current?.querySelector<HTMLElement>(`[data-sub="${i}"]`)?.focus(); }} />
       )}
@@ -257,12 +259,9 @@ function OpenMenuView({ menu }: { menu: OpenMenu }) {
       removeEventListener('blur', resize);
     };
   }, []);
-
-  // the touch that opened the menu ends with a click under the finger; ignore it
-  const guard = () => menu.via === 'touch' && performance.now() - menu.at < 450;
   return (
     <div ref={root} className="ctx-root" dir={rtl ? 'rtl' : 'ltr'}>
-      <MenuLevel entries={menu.build({ items })} label={menu.label} x={menu.x} y={menu.y} rtl={rtl} flipUp guard={guard} onClose={closeMenu} />
+      <MenuLevel entries={menu.build({ items })} label={menu.label} x={menu.x} y={menu.y} rtl={rtl} flipUp onClose={closeMenu} />
     </div>
   );
 }
