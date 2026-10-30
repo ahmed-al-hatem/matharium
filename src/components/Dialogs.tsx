@@ -90,6 +90,8 @@ const HELP: { key: string; rows: [string, string][] }[] = [
     ['Tangent(1, f)', 'tangent line at x = 1'], ['Simplify(x(x+1) - x)', 'simplify'], ['Expand((x+1)^3)', 'expand'],
     ['Factor(x^3 - 6x^2 + 11x - 6)', 'factor a polynomial'], ['Factor(2x^2 - 8)', 'common factor & difference of squares'],
     ['Solve(2x^2 - 3x - 1 = 0)', 'exact roots (≈ for decimals)'],
+    ['Steps(3(x - 2) = x + 4)', 'step-by-step solution'], ['Steps(Derivative(sin(x^2)))', 'derivative with named rules'],
+    ['Steps(Factor(x^3 - 6x^2 + 11x - 6))', 'factoring steps'], ['Steps(x + y = 3, x - y = 1)', 'system by elimination'],
   ] },
   { key: 'help.geometry', rows: [
     ['A = (1, 2)', 'free point (drag it)'], ['Segment(A, B)', 'segment'], ['Circle(A, 3)', 'circle'],

@@ -111,7 +111,7 @@ export function splitDefinition(input: string): Definition {
 export type Category = 'point' | 'function' | 'number' | 'equation' | 'list' | 'path' | 'surface' | 'text';
 
 const COMMAND_CAT: Record<string, Category> = {
-  Solve: 'text', NSolve: 'text', Simplify: 'function', Expand: 'function', Factor: 'function',
+  Solve: 'text', NSolve: 'text', Simplify: 'function', Expand: 'function', Factor: 'function', Steps: 'text',
   Roots: 'list', Extremum: 'list', Intersect: 'list',
   Derivative: 'function', Integral: 'function', Tangent: 'path',
   Segment: 'path', Line: 'path', Ray: 'path', Vector: 'path', Circle: 'path', Polygon: 'path',

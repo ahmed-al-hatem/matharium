@@ -139,6 +139,13 @@ html[dir='rtl'] .drawer { animation-name: slide-rtl; }
 .approx-btn { margin-inline-start: 8px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text-muted-axes); font-size: 14px; line-height: 20px; vertical-align: 1px; }
 .approx-btn:hover { color: var(--text-equation); }
 .approx-btn.on { color: var(--accent-blue); border-color: var(--accent-blue); }
+.steps-btn { margin-top: 6px; padding: 1px 10px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--text-muted-axes); font-size: 12.5px; line-height: 20px; }
+.steps-btn:hover, .steps-btn.on { color: var(--accent-blue); border-color: var(--accent-blue); }
+.steps-list { margin: 8px 0 2px; padding: 0; list-style: none; counter-reset: step; cursor: default; }
+.steps-list li { counter-increment: step; position: relative; padding-block: 6px; padding-inline: 26px 0; border-top: 1px solid var(--line); }
+.steps-list li::before { content: counter(step); position: absolute; inset-inline-start: 0; top: 9px; width: 18px; height: 18px; border-radius: 50%; background: var(--line-strong); color: var(--text-highlight); font-size: 11px; line-height: 18px; text-align: center; font-family: var(--font-mono); }
+.step-tex { direction: ltr; text-align: left; font-size: 15px; color: var(--text-equation); overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+.step-note { color: var(--text-muted-axes); font-size: 12.5px; margin-top: 2px; }
 .alg-error { color: var(--curve-coral); font-size: 12.5px; font-family: var(--font-mono); margin-top: 4px; }
 .alg-note { color: var(--text-muted-axes); font-size: 12px; margin-top: 2px; }
 .alg-actions { display: flex; align-items: flex-start; padding: 12px 4px; }
