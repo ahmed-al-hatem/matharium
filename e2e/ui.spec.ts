@@ -51,7 +51,7 @@ test('angle unit: degrees make sin(30) = 0.5 and show angles in degrees', async 
   await openSettings(page, 'General');
   await page.getByLabel('Angle unit').selectOption('deg');
   await page.keyboard.press('Escape');
-  await expect(page.locator('.alg-value')).toHaveText('= 0.5');
+  await expect(page.locator('.alg-value span')).toHaveText('= 1/2'); // exact by default; ≈ gives 0.5
   await addInput(page, 'asin(1)');
   await expect(page.locator('.alg-value').nth(1)).toHaveText('= 90');
   for (const s of ['A = (1, 0)', 'B = (0, 0)', 'C = (0, 1)', 'Angle(A, B, C)']) await addInput(page, s);
@@ -85,6 +85,8 @@ test('on-screen keyboard types at the caret', async ({ page }) => {
 
 test('settings change digits and the x/y range', async ({ page }) => {
   await addInput(page, 'pi');
+  await expect(page.locator('.alg-value span')).toHaveText('= π');
+  await page.getByRole('button', { name: 'Show decimal value' }).click();
   await openSettings(page, 'General');
   await page.getByLabel('decimal places').selectOption('2');
   await page.getByRole('tab', { name: 'Graphics', exact: true }).click();
@@ -92,7 +94,7 @@ test('settings change digits and the x/y range', async ({ page }) => {
   await page.getByLabel('x max').fill('1');
   await page.getByRole('button', { name: 'Apply' }).click();
   await page.locator('.modal .pill-btn').click();
-  await expect(page.locator('.alg-value')).toHaveText('= 3.14');
+  await expect(page.locator('.alg-value span')).toHaveText('= 3.14');
   const sx = await page.evaluate(() => (window as any).__matharium.getState().view.sx);
   const w = (await page.locator('.canvas-wrap canvas').boundingBox())!.width;
   expect(sx).toBeCloseTo(w / 2, 0);

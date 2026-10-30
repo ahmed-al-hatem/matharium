@@ -16,6 +16,8 @@ export interface MObj {
   showLabel?: boolean;
   lineWidth?: number;
   slider?: { min: number; max: number; step: number };
+  /** Value line shown as a decimal (true) or exact (false); unset follows Settings.exact. */
+  approx?: boolean;
 }
 
 export type Value =
@@ -60,6 +62,8 @@ export interface Resolved {
   tex: string;
   /** Human readable value line (e.g. "= 2.83", "x = ±2") */
   display?: string;
+  /** Exact form of `display` (fractions, √, π); undefined when it would read the same */
+  exact?: string;
   /** symbols that were undefined (used to auto-create sliders) */
   missing?: string[];
 }

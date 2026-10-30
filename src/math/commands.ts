@@ -75,13 +75,17 @@ const ex = (code: string, en: string, ar: string) => ({ code, en, ar });
 export const COMMAND_TABLE: CommandDef[] = [
   // ---- algebra ----
   { name: 'Solve', cat: 'text', group: 'commands', sigs: [['equation'], ['equation', 'variable'], ['equation', 'equation2']], examples: [
-    ex('Solve(x^2 - 2x = 3)', 'solve equation', 'حل معادلة'), ex('Solve(x + y = 3, x - y = 1)', 'solve system', 'حل نظام معادلات')] },
+    ex('Solve(x^2 - 2x = 3)', 'solve equation', 'حل معادلة'), ex('Solve(x + y = 3, x - y = 1)', 'solve system', 'حل نظام معادلات'),
+    ex('Solve(2x^2 - 3x - 1 = 0)', 'exact roots (≈ for decimals)', 'جذور دقيقة (≈ للقيم العشرية)')] },
   { name: 'NSolve', cat: 'text', group: 'commands', sigs: [['equation'], ['equation', 'variable']], examples: [] },
   { name: 'Roots', cat: 'list', group: 'commands', sigs: [['function'], ['function', 'from', 'to']], examples: [ex('Roots(f)', 'zeros', 'الأصفار')] },
   { name: 'Extremum', cat: 'list', group: 'commands', sigs: [['function'], ['function', 'from', 'to']], examples: [ex('Extremum(f)', 'max / min', 'القيم العظمى والصغرى')] },
   { name: 'Intersect', cat: 'list', group: 'commands', sigs: [['object', 'object2']], examples: [ex('Intersect(f, g)', 'intersection points', 'نقاط التقاطع')] },
   { name: 'Simplify', cat: 'function', group: 'commands', sigs: [['expression']], examples: [ex('Simplify(x(x+1) - x)', 'simplify', 'تبسيط')] },
   { name: 'Expand', cat: 'function', group: 'commands', sigs: [['expression']], examples: [ex('Expand((x+1)^3)', 'expand', 'فك الأقواس')] },
+  { name: 'Factor', cat: 'function', group: 'commands', sigs: [['expression']], examples: [
+    ex('Factor(x^3 - 6x^2 + 11x - 6)', 'factor a polynomial', 'تحليل كثيرة حدود'),
+    ex('Factor(2x^2 - 8)', 'common factor & difference of squares', 'عامل مشترك وفرق بين مربعين')] },
 
   // ---- calculus ----
   { name: 'Derivative', cat: 'function', group: 'calculus', sigs: [['function'], ['function', 'order']], examples: [ex('Derivative(f)', 'symbolic derivative', 'المشتقة الرمزية')] },

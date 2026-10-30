@@ -25,6 +25,8 @@ export interface Settings {
   grid: boolean; axes: boolean; snap: boolean; axisLabels: { x: string; y: string }; gridType: GridType;
   // general
   labels: LabelMode; digits: number; sigFigs: boolean; angle: 'deg' | 'rad'; fontSize: number;
+  /** Show results as fractions, roots and multiples of π where possible (per-row ≈ overrides). */
+  exact: boolean;
   // 3D
   axes3d: boolean; plane3d: boolean; grid3d: boolean; range3d: number; projection: Projection;
   /** A device preference (localStorage), not saved with the project. */
@@ -53,7 +55,7 @@ const DEFAULT_TABLE: TableCfg = { ids: [], start: -5, end: 5, step: 1 };
 interface ParkedWorkspace extends Workspace { past: Snapshot[]; future: Snapshot[] }
 export const DEFAULT_SETTINGS: Settings = {
   grid: true, axes: true, snap: true, axisLabels: { x: 'x', y: 'y' }, gridType: 'majorMinor',
-  labels: 'auto', digits: 4, sigFigs: false, angle: 'rad', fontSize: 14,
+  labels: 'auto', digits: 4, sigFigs: false, angle: 'rad', fontSize: 14, exact: true,
   axes3d: true, plane3d: true, grid3d: true, range3d: 6, projection: 'perspective', lang: 'en',
 };
 
