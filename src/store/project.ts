@@ -16,6 +16,8 @@ export type ToolId =
 export interface View { ox: number; oy: number; sx: number; sy: number }
 export interface Settings {
   grid: boolean; axes: boolean; labels: boolean; snap: boolean; digits: number; range3d: number; lang: 'en' | 'ar';
+  /** Show results as fractions, roots and multiples of π where possible (per-row ≈ overrides). */
+  exact: boolean;
 }
 
 interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
@@ -38,7 +40,7 @@ export const DEFAULT_VIEW: View = { ox: 0, oy: 0, sx: 50, sy: 50 };
 const DEFAULT_TABLE: TableCfg = { ids: [], start: -5, end: 5, step: 1 };
 
 interface ParkedWorkspace extends Workspace { past: Snapshot[]; future: Snapshot[] }
-const DEFAULT_SETTINGS: Settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' };
+const DEFAULT_SETTINGS: Settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en', exact: true };
 
 interface State {
   mode: Mode;

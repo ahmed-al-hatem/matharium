@@ -17,7 +17,7 @@ describe('svg export', () => {
     const ctx = new SvgCtx(400, 300);
     draw(ctx, evaluateAll(objs), {
       W: 400, H: 300, view: { ox: 0, oy: 0, sx: 40, sy: 40 }, selectedId: null,
-      settings: { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' },
+      settings: { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en', exact: true },
     });
     const svg = ctx.toString();
     expect(svg.startsWith('<svg')).toBe(true);

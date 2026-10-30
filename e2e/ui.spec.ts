@@ -39,13 +39,15 @@ test('on-screen keyboard types at the caret', async ({ page }) => {
 
 test('settings change digits and the x/y range', async ({ page }) => {
   await addInput(page, 'pi');
+  await expect(page.locator('.alg-value span')).toHaveText('= π');
+  await page.getByRole('button', { name: 'Show decimal value' }).click();
   await page.getByRole('button', { name: 'Settings' }).first().click();
   await page.locator('.modal select').first().selectOption('2');
   await page.getByLabel('x min').fill('-1');
   await page.getByLabel('x max').fill('1');
   await page.getByRole('button', { name: 'Apply' }).click();
   await page.locator('.modal .pill-btn').click();
-  await expect(page.locator('.alg-value')).toHaveText('= 3.14');
+  await expect(page.locator('.alg-value span')).toHaveText('= 3.14');
   const sx = await page.evaluate(() => (window as any).__matharium.getState().view.sx);
   const w = (await page.locator('.canvas-wrap canvas').boundingBox())!.width;
   expect(sx).toBeCloseTo(w / 2, 0);

@@ -136,6 +136,9 @@ html[dir='rtl'] .drawer { animation-name: slide-rtl; }
 .alg-tex { font-size: 18px; color: var(--text-highlight); overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
 .alg-value { font-family: var(--font-math); color: var(--text-equation); font-size: 16px; margin-top: 2px; overflow-wrap: anywhere; }
 .alg-value .eq { color: var(--text-muted-axes); margin-inline-end: 6px; }
+.approx-btn { margin-inline-start: 8px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text-muted-axes); font-size: 14px; line-height: 20px; vertical-align: 1px; }
+.approx-btn:hover { color: var(--text-equation); }
+.approx-btn.on { color: var(--accent-blue); border-color: var(--accent-blue); }
 .alg-error { color: var(--curve-coral); font-size: 12.5px; font-family: var(--font-mono); margin-top: 4px; }
 .alg-note { color: var(--text-muted-axes); font-size: 12px; margin-top: 2px; }
 .alg-actions { display: flex; align-items: flex-start; padding: 12px 4px; }

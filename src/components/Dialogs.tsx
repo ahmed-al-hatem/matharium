@@ -37,7 +37,7 @@ export function SettingsDialog() {
     st.setView({ ox: (rng.xmin + rng.xmax) / 2, oy: (rng.ymin + rng.ymax) / 2, sx: W / (rng.xmax - rng.xmin), sy: H / (rng.ymax - rng.ymin) });
   };
 
-  const check = (key: 'grid' | 'axes' | 'labels' | 'snap') => (
+  const check = (key: 'grid' | 'axes' | 'labels' | 'snap' | 'exact') => (
     <label className="check"><input type="checkbox" checked={s[key]} onChange={(e) => st.setSettings({ [key]: e.target.checked })} />{t(key)}</label>
   );
 
@@ -63,6 +63,7 @@ export function SettingsDialog() {
         </div>
       )}
       <h3>{t('general')}</h3>
+      {check('exact')}
       <div className="form-row"><span>{t('digits')}</span>
         <select className="field" value={s.digits} onChange={(e) => st.setSettings({ digits: +e.target.value })}>
           {[0, 1, 2, 3, 4, 5, 6, 8, 10].map((d) => <option key={d} value={d}>{d}</option>)}
@@ -87,6 +88,8 @@ const HELP: { key: string; rows: [string, string][] }[] = [
     ['Roots(f)', 'zeros'], ['Extremum(f)', 'max / min'], ['Intersect(f, g)', 'intersection points'],
     ['Derivative(f)', 'symbolic derivative'], ['Integral(f, 0, 2)', 'definite integral (shaded)'],
     ['Tangent(1, f)', 'tangent line at x = 1'], ['Simplify(x(x+1) - x)', 'simplify'], ['Expand((x+1)^3)', 'expand'],
+    ['Factor(x^3 - 6x^2 + 11x - 6)', 'factor a polynomial'], ['Factor(2x^2 - 8)', 'common factor & difference of squares'],
+    ['Solve(2x^2 - 3x - 1 = 0)', 'exact roots (≈ for decimals)'],
   ] },
   { key: 'help.geometry', rows: [
     ['A = (1, 2)', 'free point (drag it)'], ['Segment(A, B)', 'segment'], ['Circle(A, 3)', 'circle'],

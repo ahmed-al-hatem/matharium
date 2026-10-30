@@ -7,7 +7,7 @@ import type { View } from '../store/project';
 
 let id = 0;
 const o = (input: string, name = `o${id}`): MObj => ({ id: String(id++), name, input, color: '#E45B45', visible: true });
-const settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' as const };
+const settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' as const, exact: true };
 
 describe('engine never throws on odd input', () => {
   const odd = [

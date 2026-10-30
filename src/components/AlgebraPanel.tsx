@@ -119,6 +119,7 @@ function AlgebraItem({ r }: { r: Resolved }) {
   const selected = useStore((s) => s.selectedId === obj.id);
   const editing = useStore((s) => s.editingId === obj.id);
   const mode = useStore((s) => s.mode);
+  const exactDefault = useStore((s) => s.settings.exact);
   const [draft, setDraft] = useState(obj.input);
   const [menu, setMenu] = useState(false);
   const st = useStore.getState;
@@ -133,6 +134,8 @@ function AlgebraItem({ r }: { r: Resolved }) {
 
   const isSlider = r.value?.type === 'number' && r.value.slider && obj.slider;
   const only3d = mode !== '3d' && is3DOnly(r.value);
+  const exact = r.exact;
+  const approx = obj.approx ?? !exactDefault;
 
   return (
     <div className={`alg-item ${selected ? 'selected' : ''}`} onClick={() => { st().select(obj.id); st().setEditing(obj.id); }}>
@@ -152,7 +155,16 @@ function AlgebraItem({ r }: { r: Resolved }) {
         ) : (
           <Tex tex={r.tex} />
         )}
-        {r.display && !editing && <div className="alg-value"><span>{r.display}</span></div>}
+        {r.display && !editing && (
+          <div className="alg-value">
+            <span>{exact && !approx ? exact : r.display}</span>
+            {exact && (
+              <button className={`approx-btn ${approx ? 'on' : ''}`} aria-pressed={approx} aria-label={approx ? t('showExact') : t('showDecimal')}
+                title={approx ? t('showExact') : t('showDecimal')}
+                onClick={(e) => { e.stopPropagation(); st().liveUpdate(obj.id, { approx: !approx }); }}>≈</button>
+            )}
+          </div>
+        )}
         {r.error && <div className="alg-error">{r.error}</div>}
         {only3d && <div className="alg-note">◇ {t('onlyIn3d')}</div>}
         {isSlider && !editing && <SliderRow r={r} />}
