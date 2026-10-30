@@ -1,0 +1,15 @@
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: 'e2e',
+  timeout: 45_000,
+  fullyParallel: true,
+  retries: 0,
+  reporter: [['list'], ['html', { open: 'never' }]],
+  use: { baseURL: 'http://localhost:5173', trace: 'retain-on-failure' },
+  webServer: { command: 'npm run dev', port: 5173, reuseExistingServer: true, timeout: 60_000 },
+  projects: [
+    { name: 'desktop', testIgnore: /mobile\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 860 } } },
+    { name: 'mobile', testMatch: /mobile\.spec/, use: { ...devices['Pixel 7'] } },
+  ],
+});
