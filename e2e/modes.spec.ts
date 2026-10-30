@@ -15,10 +15,17 @@ test('3D view renders surfaces, implicit surfaces and curves, and exports PNG', 
   await drawerAction(page, 'Export vector (SVG)');
   await expect(page.locator('.toast')).toHaveText('SVG export is available in 2D views');
 
+  // each mode keeps its own objects
   await setMode(page, 'Graphing');
   await expect(page.locator('.canvas-wrap canvas')).toBeVisible();
-  expect((await state(page)).objects).toHaveLength(4);
-  await expect(page.locator('.alg-note')).toHaveCount(4); // surface, implicit surface, space curve, 3D point
+  expect((await state(page)).objects).toHaveLength(0);
+  await addInput(page, 'y = x^2');
+  await setMode(page, 'Geometry');
+  expect((await state(page)).objects).toHaveLength(0);
+  await setMode(page, '3D Graphing');
+  expect((await state(page)).objects.map((o) => o.input)).toContain('P = (1, 2, 3)');
+  await setMode(page, 'Graphing');
+  expect((await state(page)).objects.map((o) => o.input)).toEqual(['y = x^2']);
 });
 
 test('help dialog inserts examples', async ({ page }) => {

@@ -20,9 +20,14 @@ export interface Settings {
 
 interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
 
+/** What each mode (graphing / geometry / 3D) keeps for itself while another mode is open. */
+export interface Workspace { objects: MObj[]; sheet: Record<string, string>; view: View; table: TableCfg }
+
 export interface ProjectFile {
   app: 'matharium'; version: 1; mode: Mode; view: View; settings: Settings;
   objects: MObj[]; sheet: Record<string, string>; table: TableCfg;
+  /** The other modes' workspaces (the current mode's lives in the fields above). */
+  workspaces?: Partial<Record<Mode, Workspace>>;
 }
 
 export interface PwaState { canInstall: boolean; installed: boolean; ios: boolean; updateReady: boolean }
@@ -30,6 +35,9 @@ export interface PwaState { canInstall: boolean; installed: boolean; ios: boolea
 export interface TableCfg { ids: string[]; start: number; end: number; step: number }
 
 export const DEFAULT_VIEW: View = { ox: 0, oy: 0, sx: 50, sy: 50 };
+const DEFAULT_TABLE: TableCfg = { ids: [], start: -5, end: 5, step: 1 };
+
+interface ParkedWorkspace extends Workspace { past: Snapshot[]; future: Snapshot[] }
 const DEFAULT_SETTINGS: Settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' };
 
 interface State {
@@ -52,6 +60,7 @@ interface State {
   homeToken: number;
   toast: string | null;
   pwa: PwaState;
+  workspaces: Partial<Record<Mode, ParkedWorkspace>>;
 
   setMode(m: Mode): void;
   setPanel(p: Panel | null): void;
@@ -141,7 +150,7 @@ export const useStore = create<State>((set, get) => {
     editingId: null,
     keyboardOpen: false,
     settingsOpen: false,
-    table: { ids: [], start: -5, end: 5, step: 1 },
+    table: { ...DEFAULT_TABLE },
     past: [],
     future: [],
     fileName: 'Untitled',
@@ -149,11 +158,22 @@ export const useStore = create<State>((set, get) => {
     homeToken: 0,
     toast: null,
     pwa: { canInstall: false, installed: false, ios: false, updateReady: false },
+    workspaces: {},
 
     setMode(mode) {
       const s = get();
+      if (mode === s.mode) return;
+      // each mode has its own objects, sheet, view and history; park the current one and bring back the target's
+      const parked: ParkedWorkspace = { objects: s.objects, sheet: s.sheet, view: s.view, table: s.table, past: s.past, future: s.future };
+      const next = s.workspaces[mode] ?? { objects: [], sheet: {}, view: { ...DEFAULT_VIEW }, table: { ...DEFAULT_TABLE }, past: [], future: [] };
+      const workspaces = { ...s.workspaces, [s.mode]: parked };
+      delete workspaces[mode];
       set({
         mode,
+        workspaces,
+        ...next,
+        selectedId: null,
+        editingId: null,
         tool: 'move',
         panel: mode === 'geometry' ? 'tools' : s.panel === 'table' || s.panel === 'spreadsheet' ? (mode === '3d' ? 'algebra' : s.panel) : s.panel ?? 'algebra',
         settings: { ...s.settings, grid: mode !== 'geometry', axes: mode !== 'geometry' },
@@ -273,6 +293,9 @@ export const useStore = create<State>((set, get) => {
         view: p.view ?? { ...DEFAULT_VIEW },
         settings: { ...DEFAULT_SETTINGS, ...p.settings, lang: get().settings.lang },
         table: p.table ?? get().table,
+        workspaces: Object.fromEntries(Object.entries(p.workspaces ?? {})
+          .filter(([m]) => m !== (p.mode ?? 'graphing'))
+          .map(([m, w]) => [m, { ...w, past: [], future: [] }])),
         past: [], future: [], dirty: false, selectedId: null, editingId: null,
         fileName: fileName ?? get().fileName,
         homeToken: get().homeToken + 1,
@@ -281,13 +304,19 @@ export const useStore = create<State>((set, get) => {
     reset() {
       set({
         objects: [], sheet: {}, view: { ...DEFAULT_VIEW }, past: [], future: [], dirty: false,
-        selectedId: null, editingId: null, fileName: 'Untitled', table: { ids: [], start: -5, end: 5, step: 1 },
+        selectedId: null, editingId: null, fileName: 'Untitled', table: { ...DEFAULT_TABLE }, workspaces: {},
         homeToken: get().homeToken + 1,
       });
     },
     toFile() {
       const s = get();
-      return { app: 'matharium', version: 1, mode: s.mode, view: s.view, settings: s.settings, objects: s.objects, sheet: s.sheet, table: s.table };
+      const workspaces = Object.fromEntries(Object.entries(s.workspaces)
+        .filter(([, w]) => w.objects.length || Object.keys(w.sheet).length)
+        .map(([m, w]) => [m, { objects: w.objects, sheet: w.sheet, view: w.view, table: w.table }]));
+      return {
+        app: 'matharium', version: 1, mode: s.mode, view: s.view, settings: s.settings, objects: s.objects, sheet: s.sheet, table: s.table,
+        ...(Object.keys(workspaces).length ? { workspaces } : {}),
+      };
     },
     markSaved(fileName) { set({ fileName, dirty: false }); },
   };

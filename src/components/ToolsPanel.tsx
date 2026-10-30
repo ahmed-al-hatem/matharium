@@ -37,15 +37,33 @@ const GROUPS: { key: string; tools: ToolId[] }[] = [
   { key: 'group.measure', tools: ['distance', 'angle'] },
 ];
 
-const TEMPLATES_3D: { label: string; input: string }[] = [
-  { label: 'z = f(x, y)', input: 'z = sin(x) cos(y)' },
-  { label: 'Plane', input: 'x + y + z = 2' },
-  { label: 'Sphere', input: 'Sphere((0, 0, 0), 3)' },
-  { label: 'Point', input: '(1, 2, 3)' },
-  { label: 'Vector', input: 'Vector((2, 2, 3))' },
-  { label: 'Helix', input: 'Curve(2cos(t), 2sin(t), t/3, t, 0, 6pi)' },
-  { label: 'Torus', input: '(sqrt(x^2 + y^2) - 3)^2 + z^2 = 1' },
-  { label: 'Surface', input: 'Surface((3 + cos(v)) cos(u), (3 + cos(v)) sin(u), sin(v), u, 0, 2pi, v, 0, 2pi)' },
+/** Faint x/y/z axes in a 3D-ish projection, shared by the 3D template icons. */
+const axes3 = <path d="M16 18v-13M16 18l-10 6M16 18l11 5" stroke="#5a5b5a" strokeWidth={1.2} />;
+
+const TEMPLATES_3D: { label: string; input: string; icon: ReactNode }[] = [
+  {
+    label: 'z = f(x, y)', input: 'z = sin(x) cos(y)',
+    icon: <S><path d="M4 18c4-6 8 2 12-4s8 2 12-2M4 18l8 7M28 12l-8 9M12 25c4-5 6 2 8-4" stroke={TE} fill="rgba(109,196,170,.2)" /></S>,
+  },
+  { label: 'Plane', input: 'x + y + z = 2', icon: <S>{axes3}<path d="M4 14 18 8l10 8-14 7z" stroke={B} fill="rgba(50,130,246,.25)" /></S> },
+  {
+    label: 'Sphere', input: 'Sphere((0, 0, 0), 3)',
+    icon: <S><circle cx={16} cy={16} r={11} stroke={MU} fill="rgba(225,181,73,.15)" /><ellipse cx={16} cy={16} rx={11} ry={3.5} stroke={MU} /><path d="M16 5a4 11 0 0 0 0 22" stroke={MU} opacity={0.6} /></S>,
+  },
+  { label: 'Point', input: '(1, 2, 3)', icon: <S>{axes3}<path d="M16 18l6-3v-6" stroke={G} strokeDasharray="2 2" />{dot(22, 9)}</S> },
+  { label: 'Vector', input: 'Vector((2, 2, 3))', icon: <S>{axes3}<path d="M16 18 25 7" stroke={CO} strokeWidth={2} /><path d="m19 7.5 6-.5-.5 6" stroke={CO} strokeWidth={2} /></S> },
+  {
+    label: 'Helix', input: 'Curve(2cos(t), 2sin(t), t/3, t, 0, 6pi)',
+    icon: <S><path d="M7 27c0-3 18-1 18-4s-18-1-18-4 18-1 18-4-18-1-18-4 18-1 18-4" stroke={B} strokeWidth={1.8} /></S>,
+  },
+  {
+    label: 'Torus', input: '(sqrt(x^2 + y^2) - 3)^2 + z^2 = 1',
+    icon: <S><ellipse cx={16} cy={16} rx={13} ry={8} stroke={MU} fill="rgba(225,181,73,.2)" /><path d="M9 15c3 4 11 4 14 0M11 16.5c3-2.5 7-2.5 10 0" stroke={MU} /></S>,
+  },
+  {
+    label: 'Surface', input: 'Surface((3 + cos(v)) cos(u), (3 + cos(v)) sin(u), sin(v), u, 0, 2pi, v, 0, 2pi)',
+    icon: <S><path d="M4 12c6-6 18-6 24 0v10c-6-6-18-6-24 0z" stroke={CO} fill="rgba(228,91,69,.15)" /><path d="M10 9.2v10M16 8v10M22 9.2v10M4 17c6-6 18-6 24 0" stroke={CO} opacity={0.6} /></S>,
+  },
 ];
 
 export function ToolsPanel() {
@@ -61,7 +79,7 @@ export function ToolsPanel() {
         <div className="tool-grid">
           {TEMPLATES_3D.map((x) => (
             <button key={x.label} className="tool-btn" onClick={() => { st.addObject(x.input); st.setPanel('algebra'); }}>
-              <Icon3D />{x.label}
+              {x.icon}{x.label}
             </button>
           ))}
         </div>
@@ -87,9 +105,3 @@ export function ToolsPanel() {
     </div>
   );
 }
-
-const Icon3D = () => (
-  <svg viewBox="0 0 32 32" fill="none" strokeWidth={1.6} aria-hidden="true">
-    <path d="m16 4 11 6v12l-11 6-11-6V10z" stroke={TE} /><path d="m5 10 11 6 11-6M16 16v12" stroke={G} />
-  </svg>
-);

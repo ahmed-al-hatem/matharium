@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { useStore } from '../store/project';
@@ -9,16 +9,33 @@ import { cam3d } from './handle';
 
 
 const AXIS_COLORS = ['#E45B45', '#6DC4AA', '#3282F6'];
+/** Camera offset from the target at "home", in units of the range. */
+const HOME = new THREE.Vector3(2.1, -2.6, 1.7);
+
+/** Smallest 1/2/5 × 10^k that is ≥ x. */
+function niceStep(x: number) {
+  const p = 10 ** Math.floor(Math.log10(x));
+  return [1, 2, 5, 10].map((m) => m * p).find((s) => s >= x * 0.999)!;
+}
 
 function buildAxes(R: number, show: boolean, grid: boolean) {
   const g = new THREE.Group();
+  const step = niceStep(R / 6);
+  const ticks: number[] = [];
+  for (let i = -Math.floor(R / step); i * step <= R + 1e-9; i++) ticks.push(+(i * step).toPrecision(12));
   if (grid) {
-    const n = Math.round(R) * 2;
-    const gh = new THREE.GridHelper(2 * R, n, 0x3a3b3a, 0x232423);
-    gh.rotation.x = Math.PI / 2;
-    (gh.material as THREE.Material).transparent = true;
-    (gh.material as THREE.Material).opacity = 0.9;
-    g.add(gh);
+    const major: number[] = [], minor: number[] = [];
+    const half = step / 2;
+    for (let i = -Math.floor(R / half); i * half <= R + 1e-9; i++) {
+      const v = i * half;
+      (i % 2 ? minor : major).push(v, -R, 0, v, R, 0, -R, v, 0, R, v, 0);
+    }
+    const lines = (pos: number[], color: number) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+    };
+    g.add(lines(minor, 0x1c1d1c), lines(major, 0x3a3b3a));
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(2 * R, 2 * R), new THREE.MeshBasicMaterial({ color: 0x787978, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }));
     g.add(plane);
   }
@@ -33,8 +50,7 @@ function buildAxes(R: number, show: boolean, grid: boolean) {
     const name = label('xyz'[i], color, R * 0.09);
     name.position.copy(d.clone().multiplyScalar(L + R * 0.1));
     g.add(name);
-    const step = R > 12 ? 5 : R > 6 ? 2 : 1;
-    for (let v = -Math.floor(R / step) * step; v <= R; v += step) {
+    for (const v of ticks) {
       if (v === 0) continue;
       const s = label(String(v).replace('-', '−'), '#787978', R * 0.05);
       s.position.copy(d.clone().multiplyScalar(v));
@@ -51,7 +67,12 @@ export function Canvas3D() {
   const items = useResolved();
   const settings = useStore((s) => s.settings);
   const homeToken = useStore((s) => s.homeToken);
-  const R = settings.range3d;
+  // the visible range follows the camera: zooming out doubles it, zooming in halves it, so the grid never runs out
+  const [level, setLevel] = useState(0);
+  const base = settings.range3d;
+  const baseRef = useRef(base);
+  baseRef.current = base;
+  const R = base * 2 ** level;
 
   // setup
   useEffect(() => {
@@ -71,7 +92,15 @@ export function Canvas3D() {
     const axes = new THREE.Group(); scene.add(axes);
     const controls = new OrbitControls(camera, renderer.domElement);
     const render = () => renderer.render(scene, camera);
-    controls.addEventListener('change', render);
+    controls.addEventListener('change', () => {
+      const dist = camera.position.distanceTo(controls.target);
+      camera.near = dist / 1000;
+      camera.far = dist * 50;
+      camera.updateProjectionMatrix();
+      const lv = Math.round(Math.log2(dist / (HOME.length() * baseRef.current)));
+      setLevel(Math.max(-8, Math.min(12, lv)));
+      render();
+    });
     ctx.current = { renderer, scene, camera, controls, content, axes, render };
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -81,7 +110,10 @@ export function Canvas3D() {
       render();
     });
     ro.observe(el);
-    cam3d.zoom = (f) => { camera.position.multiplyScalar(1 / f); controls.update(); render(); };
+    cam3d.zoom = (f) => {
+      camera.position.sub(controls.target).multiplyScalar(1 / f).add(controls.target);
+      controls.update();
+    };
     exporters.png = () => { render(); return renderer.domElement.toDataURL('image/png'); };
     exporters.svg = () => null;
     return () => {
@@ -98,11 +130,11 @@ export function Canvas3D() {
   // camera home
   useEffect(() => {
     const c = ctx.current!;
-    c.camera.position.set(R * 2.1, -R * 2.6, R * 1.7);
+    c.camera.position.copy(HOME).multiplyScalar(base);
     c.controls.target.set(0, 0, 0);
     c.controls.update();
     c.render();
-  }, [homeToken, R]);
+  }, [homeToken, base]);
 
   // axes + grid
   useEffect(() => {
