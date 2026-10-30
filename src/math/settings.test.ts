@@ -94,7 +94,7 @@ describe('settings in project files', () => {
     const s = useStore.getState().settings;
     expect(s).toMatchObject({ lang: 'ar', labels: 'all', digits: 3, angle: 'rad' });
     const out = useStore.getState().toFile();
-    expect(out.version).toBe(3);
+    expect(out.version).toBe(4);
     expect('lang' in out.settings).toBe(false);
     st.setSettings({ lang: 'en' });
   });
@@ -115,11 +115,27 @@ describe('settings in project files', () => {
     expect(migrateSettings({ gridType: 'hexagonal', projection: 'fisheye' })).toMatchObject({ gridType: 'majorMinor', projection: 'perspective' });
     st.setSettings({ gridType: 'polar', projection: 'oblique' });
     const out = useStore.getState().toFile();
-    expect(out).toMatchObject({ version: 3, settings: { gridType: 'polar', projection: 'oblique' } });
+    expect(out).toMatchObject({ version: 4, settings: { gridType: 'polar', projection: 'oblique' } });
     st.load(out);
     expect(useStore.getState().settings).toMatchObject({ gridType: 'polar', projection: 'oblique' });
     st.reset();
     st.setSettings({ gridType: 'majorMinor', projection: 'perspective' });
+  });
+  it('opens a version 3 file unchanged and saves version 4 with fixed objects', () => {
+    const st = useStore.getState();
+    const v3 = {
+      app: 'matharium', version: 3, mode: 'graphing', view: { ox: 1, oy: 2, sx: 40, sy: 40 }, settings: migrateSettings(undefined),
+      objects: [o('A = (1, 2)', 'A'), o('f(x) = x^2', 'f')], sheet: { A1: '1', A2: '=A1*2' }, table: { ids: [], start: -5, end: 5, step: 1 },
+    } as unknown as ProjectFile;
+    st.load(v3);
+    const s = useStore.getState();
+    expect(s.objects.map((x) => [x.name, x.input, x.fixed])).toEqual([['A', 'A = (1, 2)', undefined], ['f', 'f(x) = x^2', undefined]]);
+    expect(s.sheet).toEqual({ A1: '1', A2: '=A1*2' });
+    st.patchObject(s.objects[0].id, { fixed: true });
+    const out = useStore.getState().toFile();
+    expect(out.version).toBe(4);
+    expect(out.objects[0].fixed).toBe(true);
+    st.reset();
   });
   it('opens settings on the tab of the current mode', () => {
     const st = useStore.getState();

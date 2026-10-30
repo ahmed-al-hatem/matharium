@@ -39,7 +39,7 @@ interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
 export interface Workspace { objects: MObj[]; sheet: Record<string, string>; view: View; table: TableCfg }
 
 export interface ProjectFile {
-  app: 'matharium'; version: 3; mode: Mode; view: View; settings: Omit<Settings, 'lang'>;
+  app: 'matharium'; version: 4; mode: Mode; view: View; settings: Omit<Settings, 'lang'>;
   objects: MObj[]; sheet: Record<string, string>; table: TableCfg;
   /** The other modes' workspaces (the current mode's lives in the fields above). */
   workspaces?: Partial<Record<Mode, Workspace>>;
@@ -63,7 +63,13 @@ export const DEFAULT_SETTINGS: Settings = {
   axes3d: true, plane3d: true, grid3d: true, range3d: 6, projection: 'perspective', lang: 'en',
 };
 
-/** Bring settings from any file version up to the current one (v1 had boolean labels and shared 2D/3D axes and grid; v3 added grid type and projection). */
+/**
+ * File versions: v1 had boolean labels and shared 2D/3D axes and grid; v2 split them; v3 added grid type and projection;
+ * v4 added the optional per-object `fixed` flag (older objects simply lack it, so objects need no migration).
+ */
+export const FILE_VERSION = 4;
+
+/** Bring settings from any file version up to the current one. */
 export function migrateSettings(raw: Record<string, unknown> | undefined): Omit<Settings, 'lang'> {
   const r = { ...(raw ?? {}) } as Record<string, unknown>;
   if (typeof r.labels === 'boolean') r.labels = r.labels ? 'all' : 'none';
@@ -116,6 +122,8 @@ interface State {
   traces: Record<string, Vec3[]>;
   /** start time (ms) of the video recording in progress */
   recording: number | null;
+  /** the 3D view turns by itself (not saved) */
+  autoRotate: boolean;
 
   setMode(m: Mode): void;
   setPanel(p: Panel | null): void;
@@ -148,6 +156,7 @@ interface State {
   addTracePoints(pts: Record<string, Vec3>): void;
   clearTrace(id: string): void;
   setRecording(start: number | null): void;
+  setAutoRotate(on: boolean): void;
   patchObject(id: string, patch: Partial<MObj>): void;
   removeObject(id: string): void;
   renameObject(id: string, name: string): void;
@@ -232,6 +241,7 @@ export const useStore = create<State>((set, get) => {
     playing: [],
     traces: {},
     recording: null,
+    autoRotate: false,
 
     setMode(mode) {
       const s = get();
@@ -344,6 +354,7 @@ export const useStore = create<State>((set, get) => {
       set({ traces });
     },
     setRecording: (recording) => set({ recording }),
+    setAutoRotate: (autoRotate) => set({ autoRotate }),
     patchObject(id, patch) {
       record({ objects: get().objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) });
     },
@@ -414,6 +425,8 @@ export const useStore = create<State>((set, get) => {
         objects: [], sheet: {}, view: { ...DEFAULT_VIEW }, past: [], future: [], dirty: false,
         selectedId: null, editingId: null, fileName: 'Untitled', table: { ...DEFAULT_TABLE }, workspaces: {},
         homeToken: get().homeToken + 1,
+        // geometry starts on a blank sheet, like switching into it does
+        ...(get().mode === 'geometry' ? { settings: { ...get().settings, grid: false, axes: false } } : {}),
       });
     },
     toFile() {
@@ -423,7 +436,7 @@ export const useStore = create<State>((set, get) => {
         .map(([m, w]) => [m, { objects: w.objects, sheet: w.sheet, view: w.view, table: w.table }]));
       const { lang: _lang, ...settings } = s.settings;
       return {
-        app: 'matharium', version: 3, mode: s.mode, view: s.view, settings, objects: s.objects, sheet: s.sheet, table: s.table,
+        app: 'matharium', version: FILE_VERSION, mode: s.mode, view: s.view, settings, objects: s.objects, sheet: s.sheet, table: s.table,
         ...(Object.keys(workspaces).length ? { workspaces } : {}),
       };
     },

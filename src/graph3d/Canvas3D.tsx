@@ -8,6 +8,9 @@ import { build, clipPlanes, dispose, label, traceLine } from './meshes';
 import { useTraceRecorder } from '../store/animate';
 import { exporters } from '../io/fileio';
 import { cam3d } from './handle';
+import { openMenu, useContextTrigger } from '../components/ContextMenu';
+import { graph3dMenu } from '../components/contextMenus';
+import { useT } from '../i18n/i18n';
 
 
 const AXIS_COLORS = ['#E45B45', '#6DC4AA', '#3282F6'];
@@ -117,6 +120,8 @@ export function Canvas3D() {
   const items = useResolved();
   const settings = useStore((s) => s.settings);
   const homeToken = useStore((s) => s.homeToken);
+  const autoRotate = useStore((s) => s.autoRotate);
+  const t = useT();
   const traces = useStore((s) => s.traces);
   useTraceRecorder(items);
   const projRef = useRef<Projection>(settings.projection);
@@ -197,6 +202,15 @@ export function Canvas3D() {
     };
   }, []);
 
+  // auto-rotate: the controls turn the camera a little on every update while it is on
+  useEffect(() => {
+    const c = ctx.current!;
+    c.controls.autoRotate = autoRotate;
+    if (!autoRotate) return;
+    let id = requestAnimationFrame(function tick() { c.controls.update(); id = requestAnimationFrame(tick); });
+    return () => { cancelAnimationFrame(id); c.controls.autoRotate = false; };
+  }, [autoRotate]);
+
   // camera home
   useEffect(() => {
     const c = ctx.current!;
@@ -251,5 +265,19 @@ export function Canvas3D() {
     c.render();
   }, [items, R, traces]);
 
-  return <div ref={wrap} className="canvas-wrap canvas-3d" aria-label="3D graph" />;
+  // a right-button drag pans; only a right click without moving opens the menu
+  const rightDown = useRef<{ x: number; y: number } | null>(null);
+  const trigger = useContextTrigger((x, y, via) => {
+    const d = rightDown.current;
+    rightDown.current = null;
+    if (via === 'mouse' && d && Math.hypot(x - d.x, y - d.y) > 5) return;
+    openMenu({ x, y, via, label: t('ctx.graphics3d'), build: graph3dMenu, returnFocus: wrap.current });
+  });
+
+  return (
+    <div ref={wrap} className="canvas-wrap canvas-3d" aria-label="3D graph" tabIndex={0}
+      onContextMenu={trigger.onContextMenu} onKeyDown={trigger.onKeyDown}
+      onPointerDown={(e) => { if (e.button === 2) rightDown.current = { x: e.clientX, y: e.clientY }; trigger.onPointerDown(e); }}
+      onPointerMove={trigger.onPointerMove} onPointerUp={trigger.onPointerUp} onPointerCancel={trigger.onPointerCancel} />
+  );
 }

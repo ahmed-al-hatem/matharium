@@ -45,7 +45,7 @@ test('edits in place, deletes from the menu and with the Delete key', async ({ p
   expect(await inputOf(page, 'f')).toBe('f(x) = cos(x)');
 
   await page.locator('.alg-item').nth(1).getByRole('button', { name: 'More' }).click();
-  await page.locator('.obj-menu button', { hasText: 'Delete' }).click();
+  await page.locator('.ctx-menu button', { hasText: 'Delete' }).click();
   expect((await state(page)).objects.map((o) => o.name)).toEqual(['f']);
 
   await page.locator('.alg-item').first().locator('.alg-body').click();

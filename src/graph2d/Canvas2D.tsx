@@ -5,6 +5,7 @@ import { asCommand, asPolar, asTuple, splitDefinition } from '../math/parser';
 import { arrowInput, roundAt, simplify, strokeInput, textInput } from '../math/annotate';
 import { useTraceRecorder } from '../store/animate';
 import { fmtPt } from '../math/solve';
+import { pointCoords } from '../math/polar';
 import { canHostPoint, paramOf, pointAt } from '../math/geometry';
 import type { MObj, Resolved, Value, Vec2 } from '../math/types';
 import { draw, type Overlay } from './renderer';
@@ -15,6 +16,8 @@ import { hitTest } from './hit';
 import { TextLayer } from './TextLayer';
 import { exporters } from '../io/fileio';
 import { useT } from '../i18n/i18n';
+import { openMenu, useContextTrigger } from '../components/ContextMenu';
+import { graph2dMenu, objectMenu } from '../components/contextMenus';
 
 type Need = 'pt' | 'line' | 'fn' | 'obj';
 interface ToolSpec { needs: Need[] | 'poly'; make?: (a: string[]) => string; shape?: Overlay['toolShape'] }
@@ -47,12 +50,13 @@ const SKETCH_TOOLS: ToolId[] = ['text', 'pen', 'arrow'];
 
 /** A Text(…) whose position is a literal pair can be dragged (one anchored to a point follows the point). */
 function draggableLabel(o: MObj) {
+  if (o.fixed) return false;
   const c = asCommand(splitDefinition(o.input).body);
   const tup = c?.name === 'Text' && c.args[1] ? asTuple(c.args[1]) : null;
   return !!tup && tup.length === 2 && tup.every((s) => /^\s*-?(\d+\.?\d*|\.\d+)(e-?\d+)?\s*$/i.test(s));
 }
 
-const draggable = (v?: Value) => v?.type === 'point' && (v.free || !!v.on);
+const draggable = (r: Resolved | null) => !!r && !r.obj.fixed && r.value?.type === 'point' && (r.value.free || !!r.value.on);
 
 export function Canvas2D() {
   const t = useT();
@@ -239,7 +243,25 @@ export function Canvas2D() {
     for (let n = 0; ; n++) for (const b of 'abcdkmn') { const s = n ? `${b}${n}` : b; if (!used.has(s)) return s; }
   }
 
+  // right click, long press or the Menu key: the object under the pointer (or the selected one), else the graph itself
+  const menuTrigger = useContextTrigger((x, y, via) => {
+    drag.current = null;
+    pinch.current = null;
+    sketchRef.current = null;
+    setSketch(null);
+    setHover(null);
+    const { px, py } = local({ clientX: x, clientY: y });
+    const st = store();
+    const id = via === 'key' ? st.selectedId : hitTest(items, vp, px, py)?.obj.id;
+    if (id) {
+      st.select(id);
+      openMenu({ x, y, via, label: t('more'), build: objectMenu(id), returnFocus: canvas.current });
+    } else openMenu({ x, y, via, label: t('ctx.graphics'), build: graph2dMenu(size.W, size.H), returnFocus: canvas.current });
+  });
+
   function onPointerDown(e: React.PointerEvent) {
+    menuTrigger.onPointerDown(e);
+    if (e.button === 2) return; // the context menu
     (e.target as Element).setPointerCapture(e.pointerId);
     const { px, py } = local(e);
     pointers.current.set(e.pointerId, { x: px, y: py });
@@ -265,7 +287,7 @@ export function Canvas2D() {
       store().select(hit.obj.id);
       return;
     }
-    if (hit && draggable(hit.value)) {
+    if (hit && draggable(hit)) {
       beginLive();
       drag.current = { kind: 'point', id: hit.obj.id, sx: px, sy: py, view, moved: false };
       store().select(hit.obj.id);
@@ -276,6 +298,7 @@ export function Canvas2D() {
   }
 
   function onPointerMove(e: React.PointerEvent) {
+    menuTrigger.onPointerMove(e);
     const { px, py } = local(e);
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: px, y: py });
     if (pinch.current && pointers.current.size === 2) {
@@ -322,9 +345,7 @@ export function Canvas2D() {
         }
         const p = snapW(w);
         // a polar point stays polar: (r; θ°)
-        const coords = asPolar(splitDefinition(o.input).body)
-          ? `(${+Math.hypot(p.x, p.y).toFixed(4)}; ${+((Math.atan2(p.y, p.x) * 180) / Math.PI).toFixed(2)}°)`
-          : `(${p.x}, ${p.y})`;
+        const coords = pointCoords(p, !!asPolar(splitDefinition(o.input).body));
         store().liveUpdate(o.id, { input: `${named ? `${named} = ` : ''}${coords}` });
         setHover({ p, color: o.color, text: `${o.name} ${fmtPt(p, 2)}` });
       }
@@ -343,10 +364,11 @@ export function Canvas2D() {
         setHover({ p, color: hit.obj.color, text: fmtPt(p, 4) });
       }
     } else if (hover) setHover(null);
-    canvas.current!.style.cursor = tool !== 'move' ? 'crosshair' : draggable(hit?.value) ? 'grab' : 'default';
+    canvas.current!.style.cursor = tool !== 'move' ? 'crosshair' : draggable(hit) ? 'grab' : 'default';
   }
 
   function onPointerUp(e: React.PointerEvent) {
+    menuTrigger.onPointerUp();
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
     if (sketchRef.current) finishSketch();
@@ -389,6 +411,9 @@ export function Canvas2D() {
         onPointerLeave={() => { setMouse(null); if (!drag.current) setHover(null); }}
         onWheel={onWheel}
         onDoubleClick={onDoubleClick}
+        onContextMenu={menuTrigger.onContextMenu}
+        onKeyDown={menuTrigger.onKeyDown}
+        tabIndex={0}
         aria-label="Graph"
       />
       <TextLayer items={items} view={view} W={size.W} H={size.H} selectedId={selectedId} />

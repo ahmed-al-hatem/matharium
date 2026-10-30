@@ -11,7 +11,7 @@ const store = <T,>(page: Page, fn: string) => page.evaluate(`(${fn})((window).__
 
 async function openMenu(page: Page, index: number) {
   await page.locator('.alg-item').nth(index).locator('.alg-actions button').click();
-  await expect(page.locator('.obj-menu')).toBeVisible();
+  await expect(page.locator('.ctx-menu')).toBeVisible();
 }
 const closeMenu = (page: Page) => page.locator('.file-name').click();
 
@@ -90,7 +90,7 @@ test('play all / stop all, modes, and traces', async ({ page }) => {
 
   const pIndex = (await state(page)).objects.findIndex((o) => o.name === 'P');
   await openMenu(page, pIndex);
-  await page.getByRole('button', { name: 'Trace', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Trace', exact: true }).click();
   await closeMenu(page);
 
   const before = (await state(page)).past;
@@ -107,7 +107,7 @@ test('play all / stop all, modes, and traces', async ({ page }) => {
   expect((await state(page)).past).toBe(before + 1);
 
   await openMenu(page, pIndex);
-  await page.getByRole('button', { name: 'Clear trace' }).click();
+  await page.getByRole('menuitem', { name: 'Clear trace' }).click();
   expect(await store<number>(page, `s => (s.traces[s.objects.find(o => o.name === 'P').id] || []).length`)).toBe(0);
 });
 

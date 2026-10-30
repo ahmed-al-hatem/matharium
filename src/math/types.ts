@@ -18,6 +18,8 @@ export interface MObj {
   showLabel?: boolean;
   lineWidth?: number;
   slider?: { min: number; max: number; step: number; speed?: number; mode?: AnimMode };
+  /** cannot be dragged on the graph (or moved with its slider) */
+  fixed?: boolean;
   /** leave a trace of the point's positions while it moves */
   trace?: boolean;
   /** Value line shown as a decimal (true) or exact (false); unset follows Settings.exact. */
