@@ -23,6 +23,7 @@ npm run build    # production build in dist/
 ## Features
 - **Graphing**: `f(x) = sin(x)`, `y = 2x + 1`, implicit curves `x^2 + y^2 = 9`, inequalities `y < x^2`, piecewise `x < 0 ? -x : x^2`, sliders created automatically for unknown letters (`a x^2 + b`), `f'(x)`.
 - **Commands**: `Solve`, `Roots`, `Extremum`, `Intersect`, `Derivative` (symbolic), `Integral` (definite and shaded, or numeric antiderivative), `Tangent`, `Simplify`, `Expand`, systems `Solve(x + y = 3, x - y = 1)`.
+- **Worked solutions**: a *Steps* button under `Solve`, `Derivative` and `Factor` results, or the `Steps(…)` command, explains the solution line by line in English or Arabic: linear equations, quadratics (Δ, factoring or the formula), polynomials with rational roots (synthetic division), 2×2 linear systems, and derivatives with each rule named.
 - **Calculus**: `RiemannSum(f, a, b, n, "mid")` with drawn strips, `SlopeField(x - y)`, `SolveODE(f(x, y), A)` (RK4, follows a draggable point), `TaylorPolynomial(f, a, n)`, `IntegralBetween(f, g, a, b)`.
 - **Statistics**: `Mean`, `Median`, `SD`, `Histogram`, `BoxPlot` on lists `{…}` or spreadsheet ranges `A1:A20`; `Normal(μ, σ, a, b)` and `Binomial(n, p, a, b)` with the probability shaded.
 - **Input autocomplete**: matching commands with their argument signatures (English/Arabic) and object names; Tab/Enter inserts and selects the first argument, Tab moves to the next. The same command table generates the Help dialog.

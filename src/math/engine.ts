@@ -3,6 +3,7 @@ import { compileFn, freeSymbols, isKnownName, math, parseExpr, setAngleUnit, tex
 import { asCommand, asList, asTuple, normalize, splitDefinition, splitRelation } from './parser';
 import { clean, extrema, fmt, fmtPt, integrate, derivative as numDeriv, roots, solveSystem } from './solve';
 import { exactRoots, factoredTex, factoredText, factorPoly, derivativePoly, polyCoefficients, toExact, type Exact } from './exact';
+import { derivativeSteps, factorSteps, solveSteps, systemSteps, type Step } from './steps';
 import { angle, asLine, canHostPoint, circleThrough, dist, implicitOf, intersectGeom, mid, paramRange, pointAt, polygonArea, projectOnLine, sub } from './geometry';
 import { RIEMANN_RULES, polyAt, polyText, riemannSum, solveODE, taylorCoeffs, type RiemannRule } from './calculus';
 import { binomialPmf, fiveNumber, histogram, mean, median, normalCdf, normalPdf, sd } from './stats';
@@ -12,7 +13,12 @@ import type { Fn1, Fn2, MObj, Resolved, Value, Vec2, Vec3 } from './types';
 const VARS = ['x', 'y', 'z', 't'];
 const NUM_LITERAL = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i;
 
-interface Out { value: Value; display?: string; tex?: string; /** exact form of display, built only when shown */ exact?: () => string }
+interface Out {
+  value: Value; display?: string; tex?: string;
+  /** exact form of display, built only when shown */
+  exact?: () => string;
+  steps?: () => Step[] | null; stepsOpen?: boolean;
+}
 
 type Fmt = (v: number) => string;
 
@@ -164,6 +170,12 @@ export class Engine {
     return new math.OperatorNode('-', 'subtract', [this.node(rel.lhs), new math.ParenthesisNode(this.node(rel.rhs))]) as MathNode;
   }
 
+  /** Both sides of an equation; an expression counts as expression = 0. */
+  sides(src: string): [MathNode, MathNode] {
+    const rel = splitRelation(normalize(src));
+    return rel ? [this.node(rel.lhs), this.node(rel.rhs)] : [this.node(src), new math.ConstantNode(0) as MathNode];
+  }
+
   /** A function of x and y: a two-variable function object or an expression in x, y. */
   fxy(src: string): Fn2 {
     const v = this.values.get(src.trim());
@@ -240,7 +252,9 @@ export class Engine {
           const F = compileFn(this.eqNode(eqs[0]), ['x', 'y'], this.scope) as Fn2;
           const G = compileFn(this.eqNode(eqs[1]), ['x', 'y'], this.scope) as Fn2;
           const sol = solveSystem(F, G, 20);
+          const sys = [this.sides(eqs[0]), this.sides(eqs[1])];
           return {
+            steps: () => systemSteps(sys, this.scope),
             value: { type: 'text', text: '', pts: sol },
             ...(sol.length ? this.dual((m) => sol.map((p) => `{x = ${m(p.x)}, y = ${m(p.y)}}`).join(', ')) : { display: 'no real solution' }),
           };
@@ -253,7 +267,10 @@ export class Engine {
         // polynomials whose roots have a closed form are solved exactly; everything else numerically
         const pr = this.polyRoots(n, v);
         const r = pr.complete ? pr.exact!.map((e) => e.value) : roots(f, -100, 100);
+        const [lhs, rhs] = this.sides(eqs[0]);
+        const scope = this.scope;
         return {
+          steps: () => solveSteps(lhs, rhs, v, scope),
           value: { type: 'text', text: '', pts: v === 'x' ? r.map((x) => ({ x, y: 0 })) : undefined },
           ...(r.length ? this.dual((m) => r.map((x) => `${v} = ${m(x)}`).join(', '), pr.fmt) : { display: 'no real solution' }),
         };
@@ -311,7 +328,12 @@ export class Engine {
             let d = node;
             for (let i = 0; i < order; i++) d = math.simplify(math.derivative(d, param));
             this.nodes.set(selfName, { node: d, param });
-            return { value: { type: 'function', f: compileFn(d, [param], this.scope) as Fn1, param, tex: toTex(d) }, display: undefined, tex: `${texName(selfName)}(${param}) = ${toTex(d)}` };
+            const scope = this.scope;
+            return {
+              value: { type: 'function', f: compileFn(d, [param], this.scope) as Fn1, param, tex: toTex(d) }, display: undefined,
+              tex: `${texName(selfName)}(${param}) = ${toTex(d)}`,
+              steps: () => (order === 1 ? derivativeSteps(node, param, scope) : null),
+            };
           } catch { /* fall back to numeric */ }
         }
         let g = f;
@@ -491,7 +513,17 @@ export class Engine {
         if (!c) throw new EvalError('Factor needs a polynomial with rational coefficients');
         const fz = factorPoly(c);
         if (node) this.nodes.set(selfName, { node, param });
-        return { value: { type: 'function', f, param, tex: factoredTex(fz, param) }, display: `= ${factoredText(fz, param)}` };
+        return { value: { type: 'function', f, param, tex: factoredTex(fz, param) }, display: `= ${factoredText(fz, param)}`, steps: () => factorSteps(c, param) };
+      }
+      case 'Steps': {
+        need(1);
+        // Steps(Solve(…)), Steps(Derivative(…)), Steps(Factor(…)), or an equation / system to solve
+        const bad = new EvalError('Steps works with Solve, Derivative and Factor');
+        const inner = A.length === 1 ? asCommand(A[0]) : null;
+        if (inner && !['Solve', 'NSolve', 'Derivative', 'Factor'].includes(inner.name)) throw bad;
+        const out = inner ? this.command(inner.name, inner.args, selfName) : this.command('Solve', A, selfName);
+        if (!out.steps) throw bad;
+        return { ...out, stepsOpen: true };
       }
       case 'Tangent': {
         need(2);
@@ -774,6 +806,11 @@ function withExact(r: Resolved, make: () => string) {
   });
 }
 
+/** Steps are an extra: a bug in them must never break the row. */
+function safeSteps(make: () => Step[] | null): Step[] | null {
+  try { return make(); } catch { return null; }
+}
+
 /** Evaluate all objects, resolving dependencies regardless of order. */
 export function evaluateAll(objs: MObj[], digits = 4, sheet: Record<string, string> = {}, opts: EvalOptions = {}): Resolved[] {
   return run(objs, digits, sheet, opts).results;
@@ -804,6 +841,8 @@ function run(objs: MObj[], digits: number, sheet: Record<string, string> = {}, o
         eng.register(nameOf(o), out.value);
         const r: Resolved = { obj: o, value: out.value, display: out.display, tex: out.tex ?? tryTex(o.input) };
         if (out.exact) withExact(r, out.exact);
+        if (out.steps) { const make = out.steps; let cached: Step[] | null | undefined; r.steps = () => (cached === undefined ? (cached = safeSteps(make)) : cached); }
+        if (out.stepsOpen) r.stepsOpen = true;
         res.set(o.id, r);
       } catch (e) {
         if (e instanceof UndefinedSymbolError && names.has(e.symbol) && !eng.values.has(e.symbol) && e.symbol !== nameOf(o)) {

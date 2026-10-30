@@ -86,6 +86,11 @@ export const COMMAND_TABLE: CommandDef[] = [
   { name: 'Factor', cat: 'function', group: 'commands', sigs: [['expression']], examples: [
     ex('Factor(x^3 - 6x^2 + 11x - 6)', 'factor a polynomial', 'تحليل كثيرة حدود'),
     ex('Factor(2x^2 - 8)', 'common factor & difference of squares', 'عامل مشترك وفرق بين مربعين')] },
+  { name: 'Steps', cat: 'text', group: 'commands', sigs: [['equation'], ['equation', 'equation2'], ['expression']], examples: [
+    ex('Steps(3(x - 2) = x + 4)', 'step-by-step solution', 'حل خطوة بخطوة'),
+    ex('Steps(Derivative(sin(x^2)))', 'derivative with named rules', 'مشتقة مع ذكر القواعد'),
+    ex('Steps(Factor(x^3 - 6x^2 + 11x - 6))', 'factoring steps', 'خطوات التحليل'),
+    ex('Steps(x + y = 3, x - y = 1)', 'system by elimination', 'نظام بالحذف')] },
 
   // ---- calculus ----
   { name: 'Derivative', cat: 'function', group: 'calculus', sigs: [['function'], ['function', 'order']], examples: [ex('Derivative(f)', 'symbolic derivative', 'المشتقة الرمزية')] },

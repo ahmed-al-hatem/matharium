@@ -1,3 +1,5 @@
+import type { Step } from './steps';
+
 export interface Vec2 { x: number; y: number }
 export interface Vec3 { x: number; y: number; z: number }
 
@@ -64,6 +66,10 @@ export interface Resolved {
   display?: string;
   /** Exact form of `display` (fractions, √, π); undefined when it would read the same */
   exact?: string;
+  /** Worked solution (Solve, Derivative, Factor), built on first call; null when no steps apply */
+  steps?: () => Step[] | null;
+  /** Show the steps expanded (the Steps command) */
+  stepsOpen?: boolean;
   /** symbols that were undefined (used to auto-create sliders) */
   missing?: string[];
 }
