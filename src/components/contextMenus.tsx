@@ -4,15 +4,12 @@ import { ANIM_MODES, SPEEDS } from '../store/animate';
 import { asPolar, splitDefinition } from '../math/parser';
 import { pointCoords } from '../math/polar';
 import { roundAt, textInput } from '../math/annotate';
-import type { MObj, Resolved } from '../math/types';
+import { shown, type MObj, type Resolved } from '../math/types';
 import { fitView, Viewport } from '../graph2d/viewport';
 import { exportPNG } from '../io/fileio';
 import { translate } from '../i18n/i18n';
 import { Icon } from './Icons';
 import type { MenuBuilder, MenuEntry } from './ContextMenu';
-
-/** Step 4 adds the object properties dialog; until then the menu does not offer it. */
-export const OBJECT_PROPERTIES = false;
 
 const tr = (key: string) => translate(useStore.getState().settings.lang, key);
 const GRID_ICONS = { majorMinor: Icon.gridMajorMinor, major: Icon.gridMajor, polar: Icon.gridPolar, isometric: Icon.gridIsometric, dots: Icon.gridDots };
@@ -35,7 +32,7 @@ export const graph2dMenu = (W: number, H: number): MenuBuilder => ({ items }) =>
     {
       kind: 'item', label: tr('showAll'), icon: Icon.fit,
       onSelect: () => {
-        const v = fitView(items.filter((r) => r.obj.visible && r.value).map((r) => r.value!), st.view, W, H);
+        const v = fitView(items.filter((r) => shown(r) && r.value).map((r) => r.value!), st.view, W, H);
         if (v) st.setView(v);
       },
     },
@@ -168,7 +165,7 @@ export const objectMenu = (id: string): MenuBuilder => ({ items }) => {
     { kind: 'item', label: tr('copyDef'), icon: Icon.copy, onSelect: () => { navigator.clipboard?.writeText(obj.input).then(() => st.notify('copied'), () => {}); } },
     { kind: 'item', label: tr('delete'), icon: Icon.trash, danger: true, onSelect: () => st.removeObject(obj.id) },
   );
-  if (OBJECT_PROPERTIES) out.push({ kind: 'sep' }, { kind: 'item', label: `${tr('settings')}…`, icon: Icon.gear, onSelect: () => {} });
+  out.push({ kind: 'sep' }, { kind: 'item', label: `${tr('settings')}…`, icon: Icon.gear, onSelect: () => st.openProperties([obj.id]) });
   return out;
 };
 

@@ -9,6 +9,7 @@ import { TablePanel } from './components/TablePanel';
 import { SpreadsheetPanel } from './components/SpreadsheetPanel';
 import { MathKeyboard } from './components/MathKeyboard';
 import { HelpDialog, SettingsDialog } from './components/Dialogs';
+import { PropertiesPanel } from './components/PropertiesPanel';
 import { TemplatesDialog } from './components/TemplatesDialog';
 import { Worksheet } from './components/Worksheet';
 import { ContextMenuHost } from './components/ContextMenu';
@@ -35,6 +36,7 @@ export default function App() {
   const lang = useStore((s) => s.settings.lang);
   const keyboardOpen = useStore((s) => s.keyboardOpen);
   const settingsTab = useStore((s) => s.settingsTab);
+  const propsIds = useStore((s) => s.propsIds);
   const fontSize = useStore((s) => s.settings.fontSize);
   const toast = useStore((s) => s.toast);
   const fileName = useStore((s) => s.fileName);
@@ -113,6 +115,7 @@ export default function App() {
           </aside>
         )}
         <Stage />
+        {propsIds && <PropertiesPanel ids={propsIds} />}
       </div>
       {keyboardOpen && <MathKeyboard />}
       {settingsTab && <SettingsDialog tab={settingsTab} />}

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { categorize, splitDefinition } from '../math/parser';
 import { missingSymbols } from '../math/engine';
-import type { MObj, Vec3 } from '../math/types';
+import { EQ_FORMS, LABEL_TEXTS, LINE_STYLES, POINT_STYLES, type MObj, type Vec3 } from '../math/types';
 
 export const PALETTE = ['#E45B45', '#6DC4AA', '#E1B549', '#3282F6'];
 export const EXTRA_COLORS = ['#DCDCDC', '#B07CE8', '#E87CB0', '#8FCB5A'];
@@ -27,6 +27,8 @@ export interface Settings {
   labels: LabelMode; digits: number; sigFigs: boolean; angle: 'deg' | 'rad'; fontSize: number;
   /** Show results as fractions, roots and multiples of π where possible (per-row ≈ overrides). */
   exact: boolean;
+  /** List auxiliary objects in the algebra view too. */
+  showAux: boolean;
   // 3D
   axes3d: boolean; plane3d: boolean; grid3d: boolean; range3d: number; projection: Projection;
   /** A device preference (localStorage), not saved with the project. */
@@ -39,7 +41,7 @@ interface Snapshot { objects: MObj[]; sheet: Record<string, string> }
 export interface Workspace { objects: MObj[]; sheet: Record<string, string>; view: View; table: TableCfg }
 
 export interface ProjectFile {
-  app: 'matharium'; version: 4; mode: Mode; view: View; settings: Omit<Settings, 'lang'>;
+  app: 'matharium'; version: 5; mode: Mode; view: View; settings: Omit<Settings, 'lang'>;
   objects: MObj[]; sheet: Record<string, string>; table: TableCfg;
   /** The other modes' workspaces (the current mode's lives in the fields above). */
   workspaces?: Partial<Record<Mode, Workspace>>;
@@ -59,15 +61,16 @@ const DEFAULT_TABLE: TableCfg = { ids: [], start: -5, end: 5, step: 1 };
 interface ParkedWorkspace extends Workspace { past: Snapshot[]; future: Snapshot[] }
 export const DEFAULT_SETTINGS: Settings = {
   grid: true, axes: true, snap: true, axisLabels: { x: 'x', y: 'y' }, gridType: 'majorMinor',
-  labels: 'auto', digits: 4, sigFigs: false, angle: 'rad', fontSize: 14, exact: true,
+  labels: 'auto', digits: 4, sigFigs: false, angle: 'rad', fontSize: 14, exact: true, showAux: false,
   axes3d: true, plane3d: true, grid3d: true, range3d: 6, projection: 'perspective', lang: 'en',
 };
 
 /**
  * File versions: v1 had boolean labels and shared 2D/3D axes and grid; v2 split them; v3 added grid type and projection;
- * v4 added the optional per-object `fixed` flag (older objects simply lack it, so objects need no migration).
+ * v4 added the optional per-object `fixed` flag (older objects simply lack it, so objects need no migration);
+ * v5 added the object properties (caption, label text, style, equation form, digits, show-if condition, layer), checked by migrateObjects.
  */
-export const FILE_VERSION = 4;
+export const FILE_VERSION = 5;
 
 /** Bring settings from any file version up to the current one. */
 export function migrateSettings(raw: Record<string, unknown> | undefined): Omit<Settings, 'lang'> {
@@ -82,6 +85,32 @@ export function migrateSettings(raw: Record<string, unknown> | undefined): Omit<
   if (!PROJECTIONS.includes(r.projection as Projection)) delete r.projection;
   const { lang: _lang, ...rest } = { ...DEFAULT_SETTINGS, ...r } as Settings;
   return rest;
+}
+
+const inRange = (v: unknown, lo: number, hi: number) => typeof v === 'number' && v >= lo && v <= hi;
+const OPTIONAL_CHECKS: [keyof MObj, (v: unknown) => boolean][] = [
+  ['labelMode', (v) => LABEL_TEXTS.includes(v as never)],
+  ['lineStyle', (v) => LINE_STYLES.includes(v as never)],
+  ['pointStyle', (v) => POINT_STYLES.includes(v as never)],
+  ['eqForm', (v) => EQ_FORMS.includes(v as never)],
+  ['opacity', (v) => inRange(v, 0, 1)],
+  ['lineWidth', (v) => inRange(v, 0.5, 20)],
+  ['pointSize', (v) => inRange(v, 1, 20)],
+  ['digits', (v) => Number.isInteger(v) && inRange(v, 0, 15)],
+  ['layer', (v) => Number.isInteger(v) && inRange(v, 0, 9)],
+  ['caption', (v) => typeof v === 'string'],
+  ['showIf', (v) => typeof v === 'string'],
+];
+
+/** Objects from any file version: optional properties with values this version does not know are dropped. */
+export function migrateObjects(objs: MObj[] | undefined): MObj[] {
+  return (objs ?? []).map((o) => {
+    const bad = OPTIONAL_CHECKS.filter(([k, ok]) => o[k] !== undefined && !ok(o[k]));
+    if (!bad.length) return o;
+    const out = { ...o };
+    for (const [k] of bad) delete out[k];
+    return out;
+  });
 }
 
 /** Whether an object shows its label when it has no explicit choice of its own. */
@@ -107,6 +136,8 @@ interface State {
   keyboardOpen: boolean;
   /** The open Settings tab, or null when the dialog is closed. */
   settingsTab: SettingsTab | null;
+  /** Objects shown in the properties panel, or null when it is closed. */
+  propsIds: string[] | null;
   table: TableCfg;
   past: Snapshot[];
   future: Snapshot[];
@@ -138,6 +169,8 @@ interface State {
   /** Open Settings on a tab (default: the one for the current mode). */
   openSettings(tab?: SettingsTab): void;
   closeSettings(): void;
+  openProperties(ids: string[]): void;
+  closeProperties(): void;
   setTable(t: Partial<TableCfg>): void;
   notify(msg: string): void;
   setPwa(p: Partial<PwaState>): void;
@@ -158,6 +191,8 @@ interface State {
   setRecording(start: number | null): void;
   setAutoRotate(on: boolean): void;
   patchObject(id: string, patch: Partial<MObj>): void;
+  /** One change to several objects, as one undo step. */
+  patchObjects(ids: string[], patch: Partial<MObj>): void;
   removeObject(id: string): void;
   renameObject(id: string, name: string): void;
   setCell(ref: string, raw: string): void;
@@ -229,6 +264,7 @@ export const useStore = create<State>((set, get) => {
     editingId: null,
     keyboardOpen: false,
     settingsTab: null,
+    propsIds: null,
     table: { ...DEFAULT_TABLE },
     past: [],
     future: [],
@@ -258,6 +294,7 @@ export const useStore = create<State>((set, get) => {
         ...next,
         selectedId: null,
         editingId: null,
+        propsIds: null,
         tool: 'move',
         panel: mode === 'geometry' ? 'tools' : s.panel === 'table' || s.panel === 'spreadsheet' ? (mode === '3d' ? 'algebra' : s.panel) : s.panel ?? 'algebra',
         settings: mode === '3d' ? s.settings : { ...s.settings, grid: mode !== 'geometry', axes: mode !== 'geometry' },
@@ -278,6 +315,8 @@ export const useStore = create<State>((set, get) => {
     setKeyboard: (keyboardOpen) => set({ keyboardOpen }),
     openSettings: (tab) => set({ settingsTab: tab ?? (get().mode === '3d' ? '3d' : 'graphics') }),
     closeSettings: () => set({ settingsTab: null }),
+    openProperties: (ids) => set({ propsIds: ids }),
+    closeProperties: () => set({ propsIds: null }),
     setTable: (t) => set({ table: { ...get().table, ...t }, dirty: true }),
     notify(toast) {
       set({ toast });
@@ -358,9 +397,13 @@ export const useStore = create<State>((set, get) => {
     patchObject(id, patch) {
       record({ objects: get().objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) });
     },
+    patchObjects(ids, patch) {
+      record({ objects: get().objects.map((o) => (ids.includes(o.id) ? { ...o, ...patch } : o)) });
+    },
     removeObject(id) {
       const s = get();
-      record({ objects: s.objects.filter((o) => o.id !== id), selectedId: s.selectedId === id ? null : s.selectedId });
+      const propsIds = s.propsIds?.filter((x) => x !== id) ?? null;
+      record({ objects: s.objects.filter((o) => o.id !== id), selectedId: s.selectedId === id ? null : s.selectedId, propsIds: propsIds?.length ? propsIds : null });
     },
     renameObject(id, name) {
       const s = get();
@@ -405,15 +448,15 @@ export const useStore = create<State>((set, get) => {
       set({
         traces: {},
         mode: p.mode ?? 'graphing',
-        objects: p.objects ?? [],
+        objects: migrateObjects(p.objects),
         sheet: p.sheet ?? {},
         view: p.view ?? { ...DEFAULT_VIEW },
         settings: { ...migrateSettings(p.settings as Record<string, unknown> | undefined), lang: get().settings.lang },
         table: p.table ?? get().table,
         workspaces: Object.fromEntries(Object.entries(p.workspaces ?? {})
           .filter(([m]) => m !== (p.mode ?? 'graphing'))
-          .map(([m, w]) => [m, { ...w, past: [], future: [] }])),
-        past: [], future: [], dirty: false, selectedId: null, editingId: null,
+          .map(([m, w]) => [m, { ...w, objects: migrateObjects(w.objects), past: [], future: [] }])),
+        past: [], future: [], dirty: false, selectedId: null, editingId: null, propsIds: null,
         fileName: fileName ?? get().fileName,
         homeToken: get().homeToken + 1,
       });
@@ -423,7 +466,7 @@ export const useStore = create<State>((set, get) => {
       set({
         traces: {},
         objects: [], sheet: {}, view: { ...DEFAULT_VIEW }, past: [], future: [], dirty: false,
-        selectedId: null, editingId: null, fileName: 'Untitled', table: { ...DEFAULT_TABLE }, workspaces: {},
+        selectedId: null, editingId: null, propsIds: null, fileName: 'Untitled', table: { ...DEFAULT_TABLE }, workspaces: {},
         homeToken: get().homeToken + 1,
         // geometry starts on a blank sheet, like switching into it does
         ...(get().mode === 'geometry' ? { settings: { ...get().settings, grid: false, axes: false } } : {}),

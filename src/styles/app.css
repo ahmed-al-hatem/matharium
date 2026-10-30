@@ -389,6 +389,37 @@ select.field { font-family: inherit; font-size: 13px; }
 .ws-notes:empty::before { content: attr(data-placeholder); color: #999; }
 .ws-line { height: 32px; border-bottom: 1px solid #bbb; }
 
+/* ---------- object properties (docked at the end of the stage) ---------- */
+.props-panel { width: 440px; max-width: 48vw; flex: none; display: flex; flex-direction: column; background: var(--bg-raised); border-inline-start: 1px solid var(--line-strong); min-height: 0; z-index: 6; }
+.props-panel h2 { margin: 0; padding: 10px 8px 10px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: 700; color: var(--text-ui-white); border-bottom: 1px solid var(--line); }
+html[dir='rtl'] .props-panel h2 { padding: 10px 16px 10px 8px; }
+.props-panel h2 small { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted-axes); font-family: var(--font-math); font-style: italic; }
+.props-body { display: grid; grid-template-columns: 100px 1fr; flex: 1; min-height: 0; }
+.props-list { list-style: none; margin: 0; padding: 6px 0; overflow: auto; border-inline-end: 1px solid var(--line); }
+.props-list li { display: flex; align-items: center; gap: 4px; padding-inline-start: 6px; }
+.props-list li.on { background: var(--accent-soft); }
+.props-list input { accent-color: var(--accent-blue); flex: none; }
+.props-list button { flex: 1; min-width: 0; text-align: start; padding: 6px 4px; font-family: var(--font-math); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.props-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.props-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 8px 12px 12px; }
+.props-main .tabs { flex-wrap: wrap; gap: 0 2px; }
+.props-main .tabs button { padding: 7px 7px; font-size: 13px; white-space: nowrap; }
+.props-tab { overflow: auto; flex: 1; }
+.props-tab .settings-row { grid-template-columns: 120px 1fr; }
+.props-tab .swatches { padding: 4px 0 10px; }
+.props-tab .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; }
+.props-tab .swatch.on { border-color: var(--text-ui-white); box-shadow: 0 0 0 2px var(--accent-blue); }
+.props-preview { padding: 6px 0; }
+.color-field { width: 56px; height: 32px; padding: 0; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--bg-canvas); }
+.range-pair { display: flex; align-items: center; gap: 8px; }
+.range-pair input[type='range'] { flex: 1; min-width: 0; accent-color: var(--accent-blue); }
+.range-pair output { font-family: var(--font-mono); font-size: 12px; min-width: 52px; color: var(--text-highlight); }
+.seg-group { display: flex; gap: 4px; }
+.seg-group button { border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 4px; color: var(--text-equation); display: grid; place-items: center; }
+.seg-group button.on { border-color: var(--accent-blue); background: var(--accent-soft); color: var(--text-ui-white); }
+.field[aria-invalid] { border-color: var(--curve-coral); }
+.alg-item.aux { opacity: .7; }
+
 @media print {
   @page { size: A4; margin: 12mm; }
   html, body { background: #fff !important; height: auto; }
@@ -438,6 +469,7 @@ select.field { font-family: inherit; font-size: 13px; }
   .keyboard { padding: 8px 8px 10px; }
   .help-grid { grid-template-columns: 1fr; }
   .rail button { font-size: 11px; }
+  .props-panel { position: absolute; inset-inline: 0; top: 0; width: auto; max-width: none; height: 62%; border-inline-start: 0; border-bottom: 1px solid var(--line-strong); box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 30; }
 }
 @media (max-width: 560px) {
   .ws-root { padding: 0 8px 24px; }
@@ -447,4 +479,8 @@ select.field { font-family: inherit; font-size: 13px; }
   .kb-grid { grid-auto-rows: minmax(34px, auto); }
   .form-row { grid-template-columns: 80px 1fr 1fr; }
   .settings-row { grid-template-columns: 1fr; gap: 4px; }
+  .props-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .props-list { display: flex; overflow-x: auto; border-inline-end: 0; border-bottom: 1px solid var(--line); padding: 4px; }
+  .props-list li { flex: none; padding-inline: 4px; border-radius: 8px; }
+  .props-tab .settings-row { grid-template-columns: 1fr; }
 }

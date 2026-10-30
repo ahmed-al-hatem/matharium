@@ -1,4 +1,4 @@
-import type { Resolved, Value, Vec2 } from '../math/types';
+import { shown, type Resolved, type Value, type Vec2 } from '../math/types';
 import type { Viewport } from './viewport';
 import { isRtl, labelPlain } from '../math/annotate';
 
@@ -70,11 +70,13 @@ export function pixelDistance(v: Value, vp: Viewport, px: number, py: number): n
 }
 
 export function hitTest(items: Resolved[], vp: Viewport, px: number, py: number, accept: (v: Value) => boolean = () => true): Resolved | null {
-  let best: Resolved | null = null, bd = Infinity;
+  let best: Resolved | null = null, bd = Infinity, bl = -1;
   for (const r of items) {
-    if (!r.value || !r.obj.visible || !accept(r.value)) continue;
+    if (!r.value || !shown(r) || !accept(r.value)) continue;
     const d = pixelDistance(r.value, vp, px, py) - (r.value.type === 'point' ? 4 : 0);
-    if (d < bd) { bd = d; best = r; }
+    // anything within reach on a higher layer wins: it is drawn on top
+    const layer = d <= 9 ? r.obj.layer ?? 0 : -1;
+    if (layer > bl || (layer === bl && d < bd)) { bd = d; best = r; bl = layer; }
   }
   return bd <= 9 ? best : null;
 }

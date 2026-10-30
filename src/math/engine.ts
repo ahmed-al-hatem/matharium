@@ -11,7 +11,7 @@ import { RIEMANN_RULES, polyAt, polyText, riemannSum, solveODE, taylorCoeffs, ty
 import { binomialPmf, fiveNumber, histogram, mean, median, normalCdf, normalPdf, sd } from './stats';
 import { evalSheet } from './sheet';
 import { parseString } from './annotate';
-import type { Fn1, Fn2, MObj, Resolved, Value, Vec2, Vec3 } from './types';
+import type { EqForm, Fn1, Fn2, MObj, Resolved, Value, Vec2, Vec3 } from './types';
 
 const VARS = ['x', 'y', 'z', 't'];
 const NUM_LITERAL = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i;
@@ -76,16 +76,21 @@ export class Engine {
   /** All objects and the spreadsheet, for commands that look beyond their arguments (Locus, A1:A9 ranges). */
   objs: MObj[] = [];
   sheet: Record<string, string> = {};
+  /** How the object being evaluated wants its line equations written. */
+  private eqForm: EqForm | undefined;
   constructor(public digits = 4, public opts: EvalOptions = {}) {}
 
   private f(v: number) { return fmt(v, this.digits, this.opts.sigFigs); }
+  /** f with the current object's rounding fixed, for text built later (exact forms are built on first read). */
+  private fNow(): Fmt { const d = this.digits; return (v) => fmt(v, d, this.opts.sigFigs); }
   private fp(p: Vec2) { return fmtPt(p, this.digits, this.opts.sigFigs); }
   private get deg() { return this.opts.angle === 'deg'; }
 
   /** Decimal display plus a lazily built exact one (fractions, √, π) from the same template. */
   private dual(make: (n: Fmt) => string, exactFmt?: Fmt): Pick<Out, 'display' | 'exact'> {
-    const ex = exactFmt ?? ((v: number) => toExact(v)?.text ?? this.f(v));
-    return { display: make((v) => this.f(v)), exact: () => make(ex) };
+    const f = this.fNow();
+    const ex = exactFmt ?? ((v: number) => toExact(v)?.text ?? f(v));
+    return { display: make(f), exact: () => make(ex) };
   }
 
   /** Exact roots of a polynomial node (null if not a polynomial), and a formatter that prefers them. */
@@ -94,7 +99,8 @@ export class Engine {
     if (c && deriv) c = derivativePoly(c);
     const r = c && c.length > 1 ? exactRoots(c) : null;
     const exact = r?.roots ?? null;
-    const fmt: Fmt = (v) => exact?.find((e) => Math.abs(e.value - v) < 1e-6 * Math.max(1, Math.abs(v)))?.text ?? toExact(v)?.text ?? this.f(v);
+    const f = this.fNow();
+    const fmt: Fmt = (v) => exact?.find((e) => Math.abs(e.value - v) < 1e-6 * Math.max(1, Math.abs(v)))?.text ?? toExact(v)?.text ?? f(v);
     return { exact, complete: !!r?.complete, fmt };
   }
 
@@ -586,7 +592,7 @@ export class Engine {
         const x0 = pv?.type === 'point' ? pv.p.x : this.num(A[0]);
         const y0 = f(x0), m = numDeriv(f, x0);
         const v: Value = { type: 'line', a: { x: x0, y: y0 }, b: { x: x0 + 1, y: y0 + m } };
-        return { value: v, display: `y = ${this.f(m)}x ${y0 - m * x0 < 0 ? '−' : '+'} ${this.f(Math.abs(y0 - m * x0))}` };
+        return { value: v, display: this.lineEq(v.a, v.b) };
       }
       case 'Segment': { need(2); const a = this.pt(A[0]), b = this.pt(A[1]); return { value: { type: 'segment', a, b }, ...this.dual((n) => `= ${n(dist(a, b))}`) }; }
       case 'Line': { need(2); const a = this.pt(A[0]); const bv = this.obj(A[1]); const l = bv && asLine(bv);
@@ -764,11 +770,29 @@ export class Engine {
     throw new EvalError(`Unknown command: ${name}`);
   }
 
+  /** The line through a and b, written in the current object's equation form. */
   lineEq(a: Vec2, b: Vec2) {
-    const A = b.y - a.y, B = a.x - b.x, C = A * a.x + B * a.y;
+    let A = b.y - a.y, B = a.x - b.x, C = A * a.x + B * a.y;
+    const sign = (v: number) => (v < 0 ? '−' : '+');
+    if (this.eqForm === 'parametric') {
+      return `X = ${this.fp(a)} + λ(${this.f(b.x - a.x)}, ${this.f(b.y - a.y)})`;
+    }
+    if (this.eqForm === 'implicit') {
+      // ax + by = c with a positive leading coefficient, in lowest whole terms, or scaled so the largest of a, b is 1
+      if (A < 0 || (A === 0 && B < 0)) { A = -A; B = -B; C = -C; }
+      const whole = [A, B, C].every((v) => Math.abs(v - Math.round(v)) < 1e-9);
+      const gcd = (p: number, q: number): number => (q ? gcd(q, p % q) : p);
+      const k = whole ? gcd(gcd(Math.round(Math.abs(A)), Math.round(Math.abs(B))), Math.round(Math.abs(C))) || 1 : Math.max(Math.abs(A), Math.abs(B));
+      A /= k; B /= k; C /= k;
+      // 1x is x
+      const term = (v: number, s: string) => (Math.abs(Math.abs(v) - 1) < 1e-12 ? s : `${this.f(Math.abs(v))}${s}`);
+      if (Math.abs(A) < 1e-12) return `${B < 0 ? '−' : ''}${term(B, 'y')} = ${this.f(C)}`;
+      const x = term(A, 'x');
+      return Math.abs(B) < 1e-12 ? `${x} = ${this.f(C)}` : `${x} ${sign(B)} ${term(B, 'y')} = ${this.f(C)}`;
+    }
     if (Math.abs(B) < 1e-12) return `x = ${this.f(a.x)}`;
     const m = -A / B, c = C / B;
-    return `y = ${this.f(m)}x ${c < 0 ? '−' : '+'} ${this.f(Math.abs(c))}`;
+    return `y = ${this.f(m)}x ${sign(c)} ${this.f(Math.abs(c))}`;
   }
 
   circleEq(c: Vec2, r: number) {
@@ -777,7 +801,15 @@ export class Engine {
   }
 
   // ---------- main evaluation ----------
+  /** Evaluate one object with its own rounding and equation form. */
   evalObject(obj: MObj): Out {
+    const digits = this.digits;
+    if (obj.digits !== undefined) this.digits = obj.digits;
+    this.eqForm = obj.eqForm;
+    try { return this.evalBody(obj); } finally { this.digits = digits; this.eqForm = undefined; }
+  }
+
+  private evalBody(obj: MObj): Out {
     const def = splitDefinition(obj.input);
     const name = def.name ?? obj.name;
     const body = def.body;
@@ -946,6 +978,13 @@ function run(objs: MObj[], digits: number, sheet: Record<string, string> = {}, o
       break;
     }
     pending = next;
+  }
+  // conditions to show objects, once every value they may refer to is known
+  for (const o of objs) {
+    const cond = o.showIf?.trim();
+    const r = res.get(o.id);
+    if (!cond || !r) continue;
+    try { r.hidden = eng.num(cond) === 0; } catch (e) { r.showIfError = (e as Error).message || 'Invalid condition'; }
   }
   return { results: objs.map((o) => res.get(o.id)!), eng };
 }

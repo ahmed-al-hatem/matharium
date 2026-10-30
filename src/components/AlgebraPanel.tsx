@@ -102,7 +102,8 @@ function AlgebraItem({ r }: { r: Resolved }) {
   const approx = obj.approx ?? !exactDefault;
 
   return (
-    <div className={`alg-item ${selected ? 'selected' : ''}`} onClick={() => { st().select(obj.id); st().setEditing(obj.id); }}
+    <div className={`alg-item ${selected ? 'selected' : ''} ${obj.auxiliary ? 'aux' : ''}`} onClick={(e) => { if (e.altKey) return; st().select(obj.id); st().setEditing(obj.id); }}
+      onDoubleClick={(e) => { if (e.altKey) { st().select(obj.id); st().setEditing(null); st().openProperties([obj.id]); } }}
       onContextMenu={trigger.onContextMenu} onKeyDown={trigger.onKeyDown} onPointerDown={trigger.onPointerDown}
       onPointerMove={trigger.onPointerMove} onPointerUp={trigger.onPointerUp} onPointerCancel={trigger.onPointerCancel}>
       <div className="alg-gutter">
@@ -160,6 +161,7 @@ export function AlgebraPanel() {
   const items = useResolved();
   const mode = useStore((s) => s.mode);
   const anyPlaying = useStore((s) => s.playing.length > 0);
+  const showAux = useStore((s) => s.settings.showAux);
   const hasSliders = items.some((r) => r.obj.slider);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -189,7 +191,7 @@ export function AlgebraPanel() {
           <button className="ghost-btn" disabled={!anyPlaying} onClick={() => useStore.getState().stopAll()}><Icon.stop />{t('stopAll')}</button>
         </div>
       )}
-      {items.map((r) => <AlgebraItem key={r.obj.id} r={r} />)}
+      {items.filter((r) => showAux || !r.obj.auxiliary).map((r) => <AlgebraItem key={r.obj.id} r={r} />)}
       <div className="alg-input-row" ref={endRef}>
         <div className="alg-gutter"><Icon.plus /></div>
         <div style={{ flex: 1 }}>

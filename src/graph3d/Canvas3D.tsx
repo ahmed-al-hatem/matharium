@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js';
 import { labelDefault, useStore, type Projection } from '../store/project';
 import { useResolved } from '../store/resolved';
+import { shown } from '../math/types';
 import { build, clipPlanes, dispose, label, traceLine } from './meshes';
 import { useTraceRecorder } from '../store/animate';
 import { exporters } from '../io/fileio';
@@ -259,7 +260,7 @@ export function Canvas3D() {
     c.trails.clear();
     const planes = clipPlanes(R * 1.0001);
     for (const r of items) {
-      const tr = r.obj.trace && r.obj.visible ? traces[r.obj.id] : undefined;
+      const tr = r.obj.trace && shown(r) ? traces[r.obj.id] : undefined;
       if (tr && tr.length > 1) c.trails.add(traceLine(tr, r.obj.color, planes));
     }
     c.render();

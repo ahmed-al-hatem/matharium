@@ -387,7 +387,11 @@ export function Canvas2D() {
   function onDoubleClick(e: React.MouseEvent) {
     const { px, py } = local(e);
     const hit = hitTest(items, vp, px, py);
-    if (hit) { store().setPanel('algebra'); store().select(hit.obj.id); store().setEditing(hit.obj.id); }
+    if (!hit) return;
+    store().select(hit.obj.id);
+    // Alt + double-click: the object's properties; a plain double-click edits its definition
+    if (e.altKey) { store().openProperties([hit.obj.id]); return; }
+    store().setPanel('algebra'); store().setEditing(hit.obj.id);
   }
 
   useEffect(() => {

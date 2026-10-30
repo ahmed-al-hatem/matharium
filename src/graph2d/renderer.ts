@@ -1,4 +1,4 @@
-import type { Resolved, Value, Vec2, Vec3 } from '../math/types';
+import { labelText, shown, type MObj, type PointStyle, type Resolved, type Value, type Vec2, type Vec3 } from '../math/types';
 import { labelDefault, type Mode, type Settings, type View } from '../store/project';
 import { fmt } from '../math/solve';
 import { isRtl, labelPlain } from '../math/annotate';
@@ -91,7 +91,7 @@ function drawTraces(ctx: Ctx, vp: Viewport, items: Resolved[], traces: Record<st
   ctx.lineWidth = 2;
   ctx.globalAlpha = 0.55;
   for (const r of items) {
-    const tr = r.obj.trace && r.obj.visible ? traces[r.obj.id] : undefined;
+    const tr = r.obj.trace && shown(r) ? traces[r.obj.id] : undefined;
     if (!tr || tr.length < 2) continue;
     ctx.strokeStyle = r.obj.color;
     ctx.beginPath();
@@ -328,14 +328,53 @@ function arrowHead(ctx: Ctx, vp: Viewport, a: Vec2, b: Vec2, size = 12) {
   ctx.fill();
 }
 
-export function dot(ctx: Ctx, x: number, y: number, color: string, r = 4.5, hollow = false) {
+export function dot(ctx: Ctx, x: number, y: number, color: string, r = 4.5, hollow = false, shape: PointStyle = 'dot') {
+  if (shape === 'cross') {
+    const d = r * 0.85;
+    ctx.beginPath();
+    ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y + d); ctx.moveTo(x - d, y + d); ctx.lineTo(x + d, y - d);
+    ctx.lineWidth = Math.max(2, r * 0.45);
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    return;
+  }
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = hollow ? C.bg : color;
+  if (shape === 'square') {
+    const d = r * 0.9;
+    ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y - d); ctx.lineTo(x + d, y + d); ctx.lineTo(x - d, y + d); ctx.closePath();
+  } else if (shape === 'diamond') {
+    const d = r * 1.25;
+    ctx.moveTo(x, y - d); ctx.lineTo(x + d, y); ctx.lineTo(x, y + d); ctx.lineTo(x - d, y); ctx.closePath();
+  } else {
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+  }
+  const ring = hollow || shape === 'ring';
+  ctx.fillStyle = ring ? C.bg : color;
   ctx.fill();
-  ctx.lineWidth = hollow ? 2 : 1.2;
-  ctx.strokeStyle = hollow ? color : 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = ring ? 2 : 1.2;
+  ctx.strokeStyle = ring ? color : 'rgba(0,0,0,0.6)';
   ctx.stroke();
+}
+
+/** How one object is stroked and filled. */
+interface Style {
+  color: string;
+  width: number;
+  /** line dash pattern ([] = solid) */
+  dash: number[];
+  /** fill opacity: the object's own, or the given default for its type */
+  fill(def: number): number;
+}
+
+/** The dash pattern of a line style at a line width. */
+export function dashFor(lineStyle: MObj['lineStyle'], width: number): number[] {
+  if (lineStyle === 'dashed') return [+(width * 4).toFixed(2), +(width * 2.5).toFixed(2)];
+  if (lineStyle === 'dotted') return [0.1, +(width * 2.2).toFixed(2)];
+  return [];
+}
+
+function styleOf(obj: MObj, width: number): Style {
+  return { color: obj.color, width, dash: dashFor(obj.lineStyle, width), fill: (def) => obj.opacity ?? def };
 }
 
 function polyline(ctx: Ctx, vp: Viewport, pts: Vec2[]) {
@@ -368,27 +407,37 @@ function shadeFnIneq(ctx: Ctx, vp: Viewport, f: (x: number) => number, below: bo
   }
 }
 
-function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: number, labels: { p: Vec2; text: string; color: string }[], name: string, showLabel: boolean) {
+type Labels = { p: Vec2; text: string; color: string }[];
+
+/** Draw one value; `label` is the text of its label, or null when it shows none. */
+function drawValue(ctx: Ctx, vp: Viewport, v: Value, st: Style, labels: Labels, name: string, label: string | null) {
+  ctx.setLineDash(st.dash);
+  drawShape(ctx, vp, v, st, labels, name, label);
+  ctx.setLineDash([]);
+}
+
+function drawShape(ctx: Ctx, vp: Viewport, v: Value, st: Style, labels: Labels, name: string, label: string | null) {
+  const { color, width } = st;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = width;
   switch (v.type) {
     case 'function': {
       if (v.ineq) {
-        ctx.globalAlpha = 0.18;
+        ctx.globalAlpha = st.fill(0.18);
         shadeFnIneq(ctx, vp, v.f, v.ineq.startsWith('<'));
         ctx.globalAlpha = 1;
         if (v.ineq === '<' || v.ineq === '>') ctx.setLineDash([8, 6]);
       }
       plotFn(ctx, v.f, vp);
-      ctx.setLineDash([]);
+      ctx.setLineDash(st.dash);
       break;
     }
     case 'implicit': {
       const cell = 5;
       const nx = Math.ceil(vp.W / cell), ny = Math.ceil(vp.H / cell);
       if (v.op !== '=') {
-        ctx.globalAlpha = 0.18;
+        ctx.globalAlpha = st.fill(0.18);
         const test = v.op === '<' || v.op === '<=' ? (z: number) => z < 0 : (z: number) => z > 0;
         for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
           if (test(v.F(vp.wx(i * cell + cell / 2), vp.wy(j * cell + cell / 2)))) ctx.fillRect(i * cell, j * cell, cell, cell);
@@ -400,7 +449,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
       ctx.beginPath();
       for (const s of segs) { ctx.moveTo(vp.px(s[0]), vp.py(s[1])); ctx.lineTo(vp.px(s[2]), vp.py(s[3])); }
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.setLineDash(st.dash);
       break;
     }
     case 'segment': seg(ctx, vp, v.a, v.b); break;
@@ -410,7 +459,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     case 'circle': {
       ctx.beginPath();
       ctx.ellipse(vp.px(v.c.x), vp.py(v.c.y), Math.abs(v.r * vp.v.sx), Math.abs(v.r * vp.v.sy), 0, 0, Math.PI * 2);
-      ctx.globalAlpha = 0.08; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.globalAlpha = st.fill(0.08); ctx.fill(); ctx.globalAlpha = 1;
       ctx.stroke();
       break;
     }
@@ -418,7 +467,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
       ctx.beginPath();
       v.pts.forEach((p, i) => (i ? ctx.lineTo(vp.px(p.x), vp.py(p.y)) : ctx.moveTo(vp.px(p.x), vp.py(p.y))));
       ctx.closePath();
-      ctx.globalAlpha = 0.2; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.globalAlpha = st.fill(0.2); ctx.fill(); ctx.globalAlpha = 1;
       ctx.stroke();
       break;
     }
@@ -426,7 +475,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
       const bx = vp.px(v.b.x), by = vp.py(v.b.y);
       const t1 = -Math.atan2(v.a.y - v.b.y, v.a.x - v.b.x);
       ctx.beginPath(); ctx.moveTo(bx, by); ctx.arc(bx, by, 28, t1, t1 - v.value, true); ctx.closePath();
-      ctx.globalAlpha = 0.25; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.globalAlpha = st.fill(0.25); ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 1.5; ctx.stroke();
       const mid = t1 - v.value / 2;
       labels.push({ p: { x: vp.wx(bx + 46 * Math.cos(mid)), y: vp.wy(by + 46 * Math.sin(mid)) }, text: `${fmt((v.value * 180) / Math.PI, 2)}°`, color });
       return;
@@ -434,7 +483,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     case 'integral': {
       const a = vp.px(Math.min(v.a, v.b)), b = vp.px(Math.max(v.a, v.b));
       const y0 = vp.py(0);
-      ctx.globalAlpha = 0.28;
+      ctx.globalAlpha = st.fill(0.28);
       for (let px = Math.max(0, a); px < Math.min(vp.W, b); px += 1) {
         const y = v.f(vp.wx(px + 0.5));
         if (!Number.isFinite(y)) continue;
@@ -460,7 +509,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
         if (!Number.isFinite(ya) || !Number.isFinite(yb)) continue;
         ctx.moveTo(x0, y0); ctx.lineTo(x0, cy(ya)); ctx.lineTo(x1, cy(yb)); ctx.lineTo(x1, y0); ctx.closePath();
       }
-      ctx.globalAlpha = 0.22; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.globalAlpha = st.fill(0.22); ctx.fill(); ctx.globalAlpha = 1;
       ctx.lineWidth = 1; ctx.stroke(); ctx.lineWidth = width;
       plotFn(ctx, v.f, vp, vp.px(Math.min(v.a, v.b)), vp.px(Math.max(v.a, v.b)));
       const mx = (v.a + v.b) / 2;
@@ -470,7 +519,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     case 'between': {
       const a = vp.px(Math.min(v.a, v.b)), b = vp.px(Math.max(v.a, v.b));
       const cy = (y: number) => Math.max(-10, Math.min(vp.H + 10, vp.py(y)));
-      ctx.globalAlpha = 0.28;
+      ctx.globalAlpha = st.fill(0.28);
       for (let px = Math.max(0, a); px < Math.min(vp.W, b); px += 1) {
         const x = vp.wx(px + 0.5), y1 = v.f(x), y2 = v.g(x);
         if (!Number.isFinite(y1) || !Number.isFinite(y2)) continue;
@@ -509,7 +558,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
           const x0 = vp.px(b.x0), x1 = vp.px(b.x1);
           ctx.moveTo(x0, y0); ctx.lineTo(x0, cy(b.h)); ctx.lineTo(x1, cy(b.h)); ctx.lineTo(x1, y0); ctx.closePath();
         }
-        ctx.globalAlpha = hi ? 0.6 : 0.22; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.globalAlpha = Math.min(1, st.fill(0.22) * (hi ? 2.7 : 1)); ctx.fill(); ctx.globalAlpha = 1;
         ctx.lineWidth = 1.2; ctx.stroke();
       }
       const top = v.bars.filter((b) => b.hi);
@@ -523,7 +572,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
       const yc = vp.py(v.y), hh = Math.min(30, 0.4 * vp.v.sy);
       ctx.beginPath();
       ctx.moveTo(q1, yc - hh); ctx.lineTo(q3, yc - hh); ctx.lineTo(q3, yc + hh); ctx.lineTo(q1, yc + hh); ctx.closePath();
-      ctx.globalAlpha = 0.22; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.globalAlpha = st.fill(0.22); ctx.fill(); ctx.globalAlpha = 1;
       ctx.moveTo(md, yc - hh); ctx.lineTo(md, yc + hh);
       ctx.moveTo(mn, yc); ctx.lineTo(q1, yc); ctx.moveTo(q3, yc); ctx.lineTo(mx, yc);
       ctx.moveTo(mn, yc - hh / 2); ctx.lineTo(mn, yc + hh / 2); ctx.moveTo(mx, yc - hh / 2); ctx.lineTo(mx, yc + hh / 2);
@@ -562,15 +611,24 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     }
     default: return;
   }
-  if (showLabel && name && v.type !== 'implicit') {
+  if (label && v.type !== 'implicit') {
     const at = labelAnchor(v, vp);
-    if (at) labels.push({ p: at, text: name, color });
+    if (at) labels.push({ p: at, text: label, color });
   }
 }
 
 function labelAnchor(v: Value, vp: Viewport): Vec2 | null {
   switch (v.type) {
     case 'segment': case 'vector': return { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 };
+    case 'line': case 'ray': {
+      // the point of the line nearest a spot right of the view's centre (a ray starts no earlier than its origin)
+      const dx = v.b.x - v.a.x, dy = v.b.y - v.a.y, L = dx * dx + dy * dy;
+      if (!L) return null;
+      const cx = vp.wx(vp.W * 0.7), cy = vp.wy(vp.H * 0.4);
+      let t = ((cx - v.a.x) * dx + (cy - v.a.y) * dy) / L;
+      if (v.type === 'ray') t = Math.max(0, t);
+      return { x: v.a.x + t * dx, y: v.a.y + t * dy };
+    }
     case 'circle': return { x: v.c.x + v.r * Math.SQRT1_2, y: v.c.y + v.r * Math.SQRT1_2 };
     case 'function': {
       for (let px = vp.W * 0.75; px > 20; px -= 10) {
@@ -594,35 +652,45 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
   drawGrid(ctx, vp, o.settings);
   if (o.traces) drawTraces(ctx, vp, items, o.traces);
 
-  const labels: { p: Vec2; text: string; color: string }[] = [];
-  const points: { p: Vec2; color: string; name: string; free: boolean; selected: boolean; hollow?: boolean; label: boolean }[] = [];
+  const labels: Labels = [];
   const texts: { v: Extract<Value, { type: 'label' }>; color: string }[] = [];
 
-  for (const r of items) {
-    const { obj, value: v } = r;
-    if (!v || !obj.visible) continue;
-    const selected = o.selectedId === obj.id;
-    const width = (obj.lineWidth ?? 2.5) + (selected ? 1 : 0);
-    const showLabel = obj.showLabel ?? labelDefault(o.settings, o.mode ?? 'graphing', v.type === 'point');
-    if (v.type === 'point') { points.push({ p: v.p, color: obj.color, name: obj.name, free: v.free || !!v.on, selected, label: showLabel }); continue; }
-    if (v.type === 'points') { v.pts.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, label: false })); continue; }
-    if (v.type === 'text') { v.pts?.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, hollow: true, label: false })); continue; }
-    if (v.type === 'label') { if (!o.htmlText) texts.push({ v, color: o.light && obj.color === '#DCDCDC' ? C.text : obj.color }); continue; }
-    if (selected) {
-      ctx.save();
-      ctx.globalAlpha = 0.25;
-      drawValue(ctx, vp, v, obj.color, width + 6, [], '', false);
-      ctx.restore();
+  // layer by layer (stable within a layer); in each layer the points go on top of the lines and areas
+  const layered = items.filter((r) => r.value && shown(r)).map((r, i) => ({ r, i, layer: r.obj.layer ?? 0 }))
+    .sort((a, b) => a.layer - b.layer || a.i - b.i);
+  for (let k = 0; k < layered.length;) {
+    const layer = layered[k].layer;
+    const points: { p: Vec2; color: string; r: number; shape?: PointStyle; selected: boolean; hollow?: boolean; label: string | null }[] = [];
+    for (; k < layered.length && layered[k].layer === layer; k++) {
+      const r = layered[k].r;
+      const { obj } = r, v = r.value!;
+      const selected = o.selectedId === obj.id;
+      const width = (obj.lineWidth ?? 2.5) + (selected ? 1 : 0);
+      const showLabel = obj.showLabel ?? labelDefault(o.settings, o.mode ?? 'graphing', v.type === 'point');
+      const label = showLabel && obj.name ? labelText(r) : null;
+      if (v.type === 'point') {
+        points.push({ p: v.p, color: obj.color, r: obj.pointSize ?? (v.free || v.on ? 5 : 4.2), shape: obj.pointStyle, selected, label });
+        continue;
+      }
+      if (v.type === 'points') { v.pts.forEach((p) => points.push({ p, color: obj.color, r: obj.pointSize ?? 4.2, shape: obj.pointStyle, selected, label: null })); continue; }
+      if (v.type === 'text') { v.pts?.forEach((p) => points.push({ p, color: obj.color, r: 4.2, selected, hollow: true, label: null })); continue; }
+      if (v.type === 'label') { if (!o.htmlText) texts.push({ v, color: o.light && obj.color === '#DCDCDC' ? C.text : obj.color }); continue; }
+      if (selected) {
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        drawValue(ctx, vp, v, { ...styleOf(obj, width + 6), dash: [] }, [], '', null);
+        ctx.restore();
+      }
+      drawValue(ctx, vp, v, styleOf(obj, width), labels, obj.name, label);
     }
-    drawValue(ctx, vp, v, obj.color, width, labels, obj.name, showLabel);
-  }
 
-  for (const pt of points) {
-    const x = vp.px(pt.p.x), y = vp.py(pt.p.y);
-    if (x < -20 || x > o.W + 20 || y < -20 || y > o.H + 20) continue;
-    if (pt.selected) { ctx.globalAlpha = 0.3; dot(ctx, x, y, pt.color, 10); ctx.globalAlpha = 1; }
-    dot(ctx, x, y, pt.color, pt.free ? 5 : 4.2, pt.hollow);
-    if (pt.label && pt.name) labels.push({ p: pt.p, text: pt.name, color: pt.color });
+    for (const pt of points) {
+      const x = vp.px(pt.p.x), y = vp.py(pt.p.y);
+      if (x < -20 || x > o.W + 20 || y < -20 || y > o.H + 20) continue;
+      if (pt.selected) { ctx.globalAlpha = 0.3; dot(ctx, x, y, pt.color, pt.r * 2); ctx.globalAlpha = 1; }
+      dot(ctx, x, y, pt.color, pt.r, pt.hollow, pt.shape);
+      if (pt.label) labels.push({ p: pt.p, text: pt.label, color: pt.color });
+    }
   }
 
   ctx.font = FONT_LABEL;
