@@ -44,6 +44,7 @@ const ARG = {
   at: { en: 'a', ar: 'a' },
   degree: { en: 'Degree', ar: 'الدرجة' },
   list: { en: 'List', ar: 'قائمة' },
+  points: { en: 'List of points', ar: 'قائمة نقاط' },
   width: { en: 'Bin width', ar: 'عرض الفئة' },
   yPos: { en: 'y position', ar: 'موضع y' },
   mean: { en: 'μ', ar: 'μ' },
@@ -57,7 +58,7 @@ const ARG = {
 } satisfies Record<string, L>;
 
 export type ArgKey = keyof typeof ARG;
-export type HelpGroup = 'commands' | 'calculus' | 'geometry' | 'stats' | '3d';
+export type HelpGroup = 'commands' | 'calculus' | 'fit' | 'geometry' | 'stats' | '3d';
 
 export interface CommandDef {
   name: string;
@@ -91,6 +92,14 @@ export const COMMAND_TABLE: CommandDef[] = [
     ex('Steps(Derivative(sin(x^2)))', 'derivative with named rules', 'مشتقة مع ذكر القواعد'),
     ex('Steps(Factor(x^3 - 6x^2 + 11x - 6))', 'factoring steps', 'خطوات التحليل'),
     ex('Steps(x + y = 3, x - y = 1)', 'system by elimination', 'نظام بالحذف')] },
+
+  // ---- regression ----
+  { name: 'FitLine', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitLine({(0,1), (1,3), (2,4), (3,7)})', 'regression line, R²', 'خط الانحدار، R²')] },
+  { name: 'FitPoly', cat: 'function', group: 'fit', sigs: [['points', 'degree']], examples: [ex('FitPoly({(0,1), (1,0), (2,3), (3,10)}, 2)', 'polynomial of degree n', 'كثيرة حدود من الدرجة n')] },
+  { name: 'FitExp', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitExp({(0,2), (1,3.3), (2,5.4), (3,9)})', 'a·e^(bx)', 'a·e^(bx)')] },
+  { name: 'FitLog', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitLog({(1,1), (2,2.4), (4,3.8), (8,5.1)})', 'a + b·ln x', 'a + b·ln x')] },
+  { name: 'FitPow', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitPow({(1,2), (2,5.6), (3,10.4), (4,16)})', 'a·x^b', 'a·x^b')] },
+  { name: 'FitSin', cat: 'function', group: 'fit', sigs: [['points']], examples: [ex('FitSin({(0,0), (1,0.84), (2,0.91), (3,0.14), (4,-0.76), (5,-0.96)})', 'a·sin(bx + c) + d', 'a·sin(bx + c) + d')] },
 
   // ---- calculus ----
   { name: 'Derivative', cat: 'function', group: 'calculus', sigs: [['function'], ['function', 'order']], examples: [ex('Derivative(f)', 'symbolic derivative', 'المشتقة الرمزية')] },

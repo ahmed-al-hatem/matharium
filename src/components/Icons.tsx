@@ -42,4 +42,8 @@ export const Icon = {
   geometry: () => <I><path d="M4 19 12 5l8 14z" /><circle cx="12" cy="5" r="1.5" fill="currentColor" /></I>,
   cube: () => <I><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" /><path d="m4 7.5 8 4.5 8-4.5M12 12v9" /></I>,
   label: () => <I><path d="M4 7h16M4 12h10M4 17h7" /></I>,
+  stop: () => <I><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none" /></I>,
+  video: () => <I><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-3v10l-5-3z" /></I>,
+  trace: () => <I><path d="M4 18c3-1 4-6 7-7s4 3 7 1" strokeDasharray="2 3" /><circle cx="19" cy="11" r="2" fill="currentColor" /></I>,
+  eraser: () => <I><path d="m14 5 5 5-8 8H7l-3-3z" /><path d="M10 9l5 5M11 18h9" /></I>,
 };

@@ -60,6 +60,29 @@ export function asTuple(s: string): string[] | null {
   return parts.length === 2 || parts.length === 3 ? parts : null;
 }
 
+/** Polar point "(r; θ)" → [r, θ] strings. */
+export function asPolar(s: string): [string, string] | null {
+  s = s.trim();
+  if (!wrapped(s, '(', ')')) return null;
+  const inner = s.slice(1, -1);
+  let depth = 0;
+  for (let i = 0; i < inner.length; i++) {
+    if (OPEN.includes(inner[i])) depth++;
+    else if (CLOSE.includes(inner[i])) depth--;
+    else if (inner[i] === ';' && depth === 0) {
+      const r = inner.slice(0, i).trim(), th = inner.slice(i + 1).trim();
+      return r && th && !th.includes(';') ? [r, th] : null;
+    }
+  }
+  return null;
+}
+
+/** "r = f(θ)" (θ is normalized to theta) → the right-hand side. */
+export function asPolarCurve(s: string): string | null {
+  const m = /^r\s*=(?!=)\s*([\s\S]+)$/.exec(s.trim());
+  return m && /(^|[^A-Za-z_])theta(?![A-Za-z_0-9])/.test(m[1]) && !/[<>]|[^<>!=]=[^=]/.test(m[1]) ? m[1].trim() : null;
+}
+
 export function asList(s: string): string[] | null {
   s = s.trim();
   if (!wrapped(s, '{', '}')) return null;
@@ -106,6 +129,7 @@ export function splitDefinition(input: string): Definition {
   if (!m) return { body: s };
   const [, name, params, body] = m;
   if (!params && ['x', 'y', 'z'].includes(name)) return { body: s };
+  if (!params && asPolarCurve(s)) return { body: s };
   // `a(x+1)=3`-style equations would also match – only accept param lists of single letters.
   return { name, params: params ? params.split(',').map((p) => p.trim()) : undefined, body: body.trim() };
 }
@@ -125,6 +149,8 @@ export function categorize(input: string): Category {
   }
   const tup = asTuple(body);
   if (tup) return tup.length === 3 ? 'surface' : 'point';
+  if (asPolar(body)) return 'point';
+  if (asPolarCurve(body)) return 'path';
   if (asList(body)) return 'list';
   const rel = splitRelation(body);
   if (rel) {

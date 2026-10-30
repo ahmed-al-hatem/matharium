@@ -1,4 +1,4 @@
-import type { Resolved, Value, Vec2 } from '../math/types';
+import type { Resolved, Value, Vec2, Vec3 } from '../math/types';
 import { labelDefault, type Mode, type Settings, type View } from '../store/project';
 import { fmt } from '../math/solve';
 import { riemannStrip } from '../math/calculus';
@@ -61,8 +61,31 @@ export interface Overlay {
 
 export interface DrawOpts {
   W: number; H: number; view: View; settings: Settings; selectedId: string | null; overlay?: Overlay;
+  /** positions left behind by traced points */
+  traces?: Record<string, Vec3[]>;
   /** For the automatic label rule (Geometry labels everything); defaults to graphing. */
   mode?: Mode;
+}
+
+function drawTraces(ctx: Ctx, vp: Viewport, items: Resolved[], traces: Record<string, Vec3[]>) {
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.55;
+  for (const r of items) {
+    const tr = r.obj.trace && r.obj.visible ? traces[r.obj.id] : undefined;
+    if (!tr || tr.length < 2) continue;
+    ctx.strokeStyle = r.obj.color;
+    ctx.beginPath();
+    let lx = NaN, ly = NaN;
+    for (const p of tr) {
+      const x = vp.px(p.x), y = vp.py(p.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) { lx = NaN; continue; }
+      // a jump (undo, typing new coordinates) starts a new piece instead of a long straight line
+      if (Math.hypot(x - lx, y - ly) < 120) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      lx = x; ly = y;
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
@@ -246,6 +269,8 @@ function plotFn(ctx: Ctx, f: (x: number) => number, vp: Viewport, from = 0, to =
   ctx.beginPath();
   let pen = false, prev = 0;
   const step = 0.75;
+  // only the visible part: an integral's ends can be millions of pixels apart when zoomed in
+  from = Math.max(from, 0); to = Math.min(to, vp.W);
   for (let px = from - 1; px <= to + 1; px += step) {
     const y = f(vp.wx(px));
     if (!Number.isFinite(y)) { pen = false; continue; }
@@ -343,7 +368,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     case 'vector': seg(ctx, vp, v.a, v.b); arrowHead(ctx, vp, v.a, v.b); break;
     case 'circle': {
       ctx.beginPath();
-      ctx.ellipse(vp.px(v.c.x), vp.py(v.c.y), v.r * vp.v.sx, v.r * vp.v.sy, 0, 0, Math.PI * 2);
+      ctx.ellipse(vp.px(v.c.x), vp.py(v.c.y), Math.abs(v.r * vp.v.sx), Math.abs(v.r * vp.v.sy), 0, 0, Math.PI * 2);
       ctx.globalAlpha = 0.08; ctx.fill(); ctx.globalAlpha = 1;
       ctx.stroke();
       break;
@@ -477,14 +502,18 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
     }
     case 'curve': {
       ctx.beginPath();
-      let pen = false;
-      const N = 1200;
+      let pen = false, lx = 0, ly = 0;
+      // long parameter ranges (polar spirals up to 6π, roses up to 24π) get more samples
+      const N = Math.round(Math.min(8000, Math.max(1200, (600 * Math.abs(v.t1 - v.t0)) / Math.PI)));
+      const jump = Math.max(vp.W, vp.H);
       for (let i = 0; i <= N; i++) {
         const t = v.t0 + ((v.t1 - v.t0) * i) / N;
         const x = v.fx(t), y = v.fy(t);
         if (!Number.isFinite(x) || !Number.isFinite(y)) { pen = false; continue; }
-        if (pen) ctx.lineTo(vp.px(x), vp.py(y)); else ctx.moveTo(vp.px(x), vp.py(y));
-        pen = true;
+        const px = Math.max(-1e5, Math.min(1e5, vp.px(x))), py = Math.max(-1e5, Math.min(1e5, vp.py(y)));
+        // break at poles (r = tan θ) instead of drawing a line across the view
+        if (pen && Math.hypot(px - lx, py - ly) < jump) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+        pen = true; lx = px; ly = py;
       }
       ctx.stroke();
       break;
@@ -520,6 +549,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
   ctx.lineJoin = 'round';
   setFontScale((o.settings.fontSize ?? 14) / 14);
   drawGrid(ctx, vp, o.settings);
+  if (o.traces) drawTraces(ctx, vp, items, o.traces);
 
   const labels: { p: Vec2; text: string; color: string }[] = [];
   const points: { p: Vec2; color: string; name: string; free: boolean; selected: boolean; hollow?: boolean; label: boolean }[] = [];

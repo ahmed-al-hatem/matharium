@@ -7,7 +7,7 @@ export const exporters: { png?: () => string; svg?: () => string | null } = {};
 let fileHandle: any = null;
 const w: any = typeof window === 'undefined' ? {} : window;
 
-function download(blob: Blob, name: string) {
+export function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -18,7 +18,7 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const baseName = () => useStore.getState().fileName.replace(/\.(mth|json)$/i, '') || 'matharium';
+export const baseName = () => useStore.getState().fileName.replace(/\.(mth|json)$/i, '') || 'matharium';
 
 export async function saveProject(saveAs = false) {
   const st = useStore.getState();

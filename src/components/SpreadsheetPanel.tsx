@@ -9,6 +9,11 @@ import { Icon } from './Icons';
 import { MathField } from './MathField';
 
 const COLS = 12, ROWS = 60;
+/** Regression choices: label key → command applied to the list of points. */
+const FIT_OPTIONS: [string, (list: string) => string][] = [
+  ['FitLine', (l) => `FitLine(${l})`], ['FitPoly2', (l) => `FitPoly(${l}, 2)`], ['FitPoly3', (l) => `FitPoly(${l}, 3)`],
+  ['FitExp', (l) => `FitExp(${l})`], ['FitLog', (l) => `FitLog(${l})`], ['FitPow', (l) => `FitPow(${l})`], ['FitSin', (l) => `FitSin(${l})`],
+];
 
 export function SpreadsheetPanel() {
   const t = useT();
@@ -43,20 +48,19 @@ export function SpreadsheetPanel() {
     return pts;
   };
 
+  /** Plots the A/B pairs as a list (reusing an identical list) and returns its name. */
   const plotPoints = () => {
     const pts = numericPairs();
-    if (pts.length) st().addObject(`{${pts.map(([x, y]) => `(${x}, ${y})`).join(', ')}}`);
+    if (!pts.length) return null;
+    const input = `{${pts.map(([x, y]) => `(${x}, ${y})`).join(', ')}}`;
+    return st().objects.find((o) => o.input === input)?.name ?? st().addObject(input);
   };
 
-  const regression = () => {
-    const pts = numericPairs();
-    if (pts.length < 2) return;
-    const n = pts.length;
-    const sx = pts.reduce((s, p) => s + p[0], 0), sy = pts.reduce((s, p) => s + p[1], 0);
-    const sxx = pts.reduce((s, p) => s + p[0] * p[0], 0), sxy = pts.reduce((s, p) => s + p[0] * p[1], 0);
-    const m = (n * sxy - sx * sy) / (n * sxx - sx * sx);
-    const c = (sy - m * sx) / n;
-    if (Number.isFinite(m)) st().addObject(`y = ${+m.toFixed(6)} x ${c < 0 ? '-' : '+'} ${Math.abs(+c.toFixed(6))}`);
+  const regression = (kind: string) => {
+    const make = FIT_OPTIONS.find(([k]) => k === kind)?.[1];
+    if (!make) return;
+    if (numericPairs().length < 2) { st().notify('sheet.fitNeed'); return; }
+    st().addObject(make(plotPoints()!));
   };
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -111,8 +115,11 @@ export function SpreadsheetPanel() {
         </table>
       </div>
       <div className="panel-footer">
-        <button className="ghost-btn" onClick={plotPoints}><Icon.graph />{t('sheet.plot')}</button>
-        <button className="ghost-btn" onClick={regression}><Icon.graph />{t('sheet.fit')}</button>
+        <button className="ghost-btn" onClick={() => plotPoints()}><Icon.graph />{t('sheet.plot')}</button>
+        <select className="ghost-btn fit-select" value="" aria-label={t('sheet.fit')} onChange={(e) => regression(e.target.value)}>
+          <option value="" disabled>{t('sheet.fit')}</option>
+          {FIT_OPTIONS.map(([k]) => <option key={k} value={k}>{t(`fit.${k}`)}</option>)}
+        </select>
         <button className="ghost-btn" onClick={() => openProject()}><Icon.upload />CSV</button>
         <button className="ghost-btn" onClick={() => exportCSV('sheet')}><Icon.download />CSV</button>
         <div className="muted" style={{ fontSize: 11.5, width: '100%' }}>{t('sheet.help')}</div>
