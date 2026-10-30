@@ -110,6 +110,9 @@ export async function openProject() {
   input.click();
 }
 
+/** The next save asks for a new file instead of overwriting the one that was open. */
+export function forgetFileHandle() { fileHandle = null; }
+
 export function newProject() {
   const st = useStore.getState();
   if (st.dirty && st.objects.length && !confirm(st.settings.lang === 'ar' ? 'تجاهل التغييرات غير المحفوظة؟' : 'Discard unsaved changes?')) return;

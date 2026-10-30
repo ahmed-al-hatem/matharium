@@ -1,0 +1,64 @@
+{
+  "app": "matharium",
+  "version": 1,
+  "mode": "3d",
+  "view": {
+    "ox": 0,
+    "oy": 0,
+    "sx": 50,
+    "sy": 50
+  },
+  "settings": {
+    "grid": true,
+    "axes": true,
+    "labels": true,
+    "snap": true,
+    "digits": 2,
+    "range3d": 6
+  },
+  "objects": [
+    {
+      "id": "t0",
+      "name": "a",
+      "input": "a = 0.3",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -1,
+        "max": 1,
+        "step": 0.05
+      }
+    },
+    {
+      "id": "t1",
+      "name": "f",
+      "input": "z = a * (x^2 + y^2)",
+      "color": "#6DC4AA",
+      "visible": true
+    },
+    {
+      "id": "t2",
+      "name": "V",
+      "input": "V = (0, 0, 0)",
+      "color": "#3282F6",
+      "visible": true
+    }
+  ],
+  "sheet": {},
+  "table": {
+    "ids": [],
+    "start": -5,
+    "end": 5,
+    "step": 1
+  },
+  "meta": {
+    "title": {
+      "en": "Paraboloid",
+      "ar": "المجسم المكافئ"
+    },
+    "description": {
+      "en": "The surface z = a(x² + y²); every vertical slice through the axis is a parabola.",
+      "ar": "السطح z = a(x² + y²)؛ كل مقطع رأسي يمر بالمحور قطع مكافئ."
+    }
+  }
+}

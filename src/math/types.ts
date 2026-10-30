@@ -34,6 +34,9 @@ export type Value =
   | { type: 'curve'; fx: Fn1; fy: Fn1; t0: number; t1: number }
   | { type: 'integral'; f: Fn1; a: number; b: number; value: number }
   | { type: 'text'; text: string; pts?: Vec2[] }
+  /** an annotation; `p` is in world units, or in pixels from the graph's top-left when `screen` */
+  | { type: 'label'; text: string; p: Vec2; screen: boolean }
+  | { type: 'stroke'; pts: Vec2[]; arrow: boolean }
   | { type: 'surface'; f: Fn2 }
   | { type: 'implicit3d'; F: Fn3 }
   | { type: 'point3d'; p: Vec3 }

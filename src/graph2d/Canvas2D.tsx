@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { beginLive, useStore, type ToolId } from '../store/project';
 import { useResolved } from '../store/resolved';
-import { splitDefinition } from '../math/parser';
+import { asCommand, asTuple, splitDefinition } from '../math/parser';
+import { arrowInput, roundAt, simplify, strokeInput, textInput } from '../math/annotate';
 import { fmtPt } from '../math/solve';
-import type { Resolved, Value, Vec2 } from '../math/types';
+import type { MObj, Resolved, Value, Vec2 } from '../math/types';
 import { draw, type Overlay } from './renderer';
 import { SvgCtx } from './svgctx';
 import { niceStep, Viewport } from './viewport';
 import { hitTest } from './hit';
+import { TextLayer } from './TextLayer';
 import { exporters } from '../io/fileio';
 import { useT } from '../i18n/i18n';
 
@@ -37,8 +39,17 @@ export const TOOL_SPECS: Partial<Record<ToolId, ToolSpec>> = {
 };
 
 const nameOf = (r: Resolved) => splitDefinition(r.obj.input).name ?? r.obj.name;
+const SKETCH_TOOLS: ToolId[] = ['text', 'pen', 'arrow'];
+
+/** A Text(…) whose position is a literal pair can be dragged (one anchored to a point follows the point). */
+function draggableLabel(o: MObj) {
+  const c = asCommand(splitDefinition(o.input).body);
+  const tup = c?.name === 'Text' && c.args[1] ? asTuple(c.args[1]) : null;
+  return !!tup && tup.length === 2 && tup.every((s) => /^\s*-?(\d+\.?\d*|\.\d+)(e-?\d+)?\s*$/i.test(s));
+}
 
 export function Canvas2D() {
+  const t = useT();
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ W: 800, H: 600 });
@@ -51,14 +62,26 @@ export function Canvas2D() {
   const [mouse, setMouse] = useState<Vec2 | null>(null);
   const [pending, setPending] = useState<{ name: string; p: Vec2 }[]>([]);
   const [fontsReady, setFontsReady] = useState(0);
-  const drag = useRef<{ kind: 'pan' | 'point'; id?: string; sx: number; sy: number; view: typeof view; moved: boolean } | null>(null);
+  const drag = useRef<{ kind: 'pan' | 'point' | 'label'; id?: string; sx: number; sy: number; view: typeof view; moved: boolean; off?: Vec2 } | null>(null);
+  const [sketch, setSketch] = useState<{ pts: Vec2[]; arrow: boolean } | null>(null);
+  const sketchRef = useRef<{ pts: Vec2[]; arrow: boolean } | null>(null);
+  const [textDraft, setTextDraft] = useState<{ px: number; py: number; value: string } | null>(null);
+  const draftRef = useRef(textDraft);
+  draftRef.current = textDraft;
+  const draftInput = useRef<HTMLInputElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; view: typeof view } | null>(null);
 
   const vp = new Viewport(view, size.W, size.H);
   const spec = TOOL_SPECS[tool];
 
-  useEffect(() => setPending([]), [tool]);
+  useEffect(() => { setPending([]); setTextDraft(null); }, [tool]);
+  // focus after the click that opened it, so the canvas mousedown does not blur it straight away
+  useEffect(() => {
+    if (!textDraft) return;
+    const id = setTimeout(() => draftInput.current?.focus());
+    return () => clearTimeout(id);
+  }, [textDraft?.px, textDraft?.py]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.fonts?.ready.then(() => setFontsReady((n) => n + 1)); }, []);
 
   useEffect(() => {
@@ -77,10 +100,10 @@ export function Canvas2D() {
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw(ctx, items, {
-      W: size.W, H: size.H, view, settings, selectedId,
-      overlay: { hover, pending: pending.map((p) => p.p), mouse, toolShape: spec?.shape ?? null },
+      W: size.W, H: size.H, view, settings, selectedId, htmlText: true,
+      overlay: { hover, pending: pending.map((p) => p.p), mouse, toolShape: spec?.shape ?? null, sketch },
     });
-  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady]);
+  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady, sketch]);
 
   // exporters
   useEffect(() => {
@@ -127,8 +150,39 @@ export function Canvas2D() {
     return hit ? { name: nameOf(hit), p: { x: vp.wx(px), y: vp.wy(py) } } : null;
   }
 
+  const roundW = (p: Vec2): Vec2 => ({ x: roundAt(p.x, view.sx), y: roundAt(p.y, view.sy) });
+
+  function commitText() {
+    const d = draftRef.current;
+    if (!d) return;
+    draftRef.current = null;
+    setTextDraft(null);
+    if (d.value.trim()) store().addObject(textInput(d.value.trim(), roundW({ x: vp.wx(d.px), y: vp.wy(d.py) })));
+  }
+
+  function finishSketch() {
+    const sk = sketchRef.current;
+    sketchRef.current = null;
+    setSketch(null);
+    if (!sk || sk.pts.length < 2) return;
+    const toPx = (p: Vec2) => ({ x: vp.px(p.x), y: vp.py(p.y) });
+    const toW = (p: Vec2) => roundW({ x: vp.wx(p.x), y: vp.wy(p.y) });
+    if (sk.arrow) {
+      const [a, b] = sk.pts.map(toPx);
+      if (Math.hypot(a.x - b.x, a.y - b.y) > 6) store().addObject(arrowInput(toW(a), toW(b)));
+      return;
+    }
+    const pts = simplify(sk.pts.map(toPx), 0.8).map(toW);
+    if (pts.length >= 2) store().addObject(strokeInput(pts));
+  }
+
   function toolClick(px: number, py: number) {
     const st = store();
+    if (tool === 'text') {
+      // a click while typing finishes the current text; the next click starts a new one
+      if (draftRef.current) commitText(); else setTextDraft({ px, py, value: '' });
+      return;
+    }
     if (tool === 'delete') {
       const hit = hitTest(items, vp, px, py);
       if (hit) st.removeObject(hit.obj.id);
@@ -180,8 +234,22 @@ export function Canvas2D() {
       drag.current = null;
       return;
     }
+    if (tool === 'pen' || tool === 'arrow') {
+      const w = { x: vp.wx(px), y: vp.wy(py) };
+      sketchRef.current = { pts: [w, w], arrow: tool === 'arrow' };
+      setSketch(sketchRef.current);
+      return;
+    }
     if (tool !== 'move') { toolClick(px, py); return; }
     const hit = hitTest(items, vp, px, py);
+    if (hit?.value?.type === 'label' && draggableLabel(hit.obj)) {
+      const v = hit.value;
+      beginLive();
+      const ax = v.screen ? v.p.x : vp.px(v.p.x), ay = v.screen ? v.p.y : vp.py(v.p.y);
+      drag.current = { kind: 'label', id: hit.obj.id, sx: px, sy: py, view, moved: false, off: { x: ax - px, y: ay - py } };
+      store().select(hit.obj.id);
+      return;
+    }
     if (hit?.value?.type === 'point' && hit.value.free) {
       beginLive();
       drag.current = { kind: 'point', id: hit.obj.id, sx: px, sy: py, view, moved: false };
@@ -203,12 +271,26 @@ export function Canvas2D() {
       return;
     }
     const w = { x: vp.wx(px), y: vp.wy(py) };
+    const sk = sketchRef.current;
+    if (sk) {
+      const last = sk.pts[sk.pts.length - 1];
+      if (sk.arrow) sketchRef.current = { ...sk, pts: [sk.pts[0], w] };
+      else if (Math.hypot(vp.px(last.x) - px, vp.py(last.y) - py) >= 1.5) sketchRef.current = { ...sk, pts: [...sk.pts, w] };
+      setSketch(sketchRef.current);
+      return;
+    }
     setMouse(spec ? snapW(w) : w);
     const d = drag.current;
     if (d) {
       if (Math.hypot(px - d.sx, py - d.sy) > 2) d.moved = true;
       if (d.kind === 'pan') {
         store().setView({ ox: d.view.ox - (px - d.sx) / d.view.sx, oy: d.view.oy + (py - d.sy) / d.view.sy });
+      } else if (d.kind === 'label' && d.id) {
+        const r = items.find((x) => x.obj.id === d.id);
+        if (r?.value?.type !== 'label' || !d.moved) return;
+        const ax = px + d.off!.x, ay = py + d.off!.y;
+        const p = r.value.screen ? { x: Math.round(ax), y: Math.round(ay) } : roundW({ x: vp.wx(ax), y: vp.wy(ay) });
+        store().liveUpdate(d.id, { input: textInput(r.value.text, p, r.value.screen, splitDefinition(r.obj.input).name) });
       } else if (d.id) {
         const o = store().objects.find((x) => x.id === d.id);
         if (!o) return;
@@ -238,7 +320,8 @@ export function Canvas2D() {
   function onPointerUp(e: React.PointerEvent) {
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
-    if (drag.current?.kind === 'point') { store().commit(); setHover(null); }
+    if (sketchRef.current) finishSketch();
+    if (drag.current?.kind === 'point' || drag.current?.kind === 'label') { store().commit(); setHover(null); }
     drag.current = null;
   }
 
@@ -263,7 +346,7 @@ export function Canvas2D() {
     return () => el.removeEventListener('wheel', prevent);
   }, []);
 
-  const hint = spec ? (pending.length ? 'toolNext' : 'toolStart') : null;
+  const hint = spec || SKETCH_TOOLS.includes(tool) ? (pending.length ? 'toolNext' : 'toolStart') : null;
 
   return (
     <div ref={wrap} className="canvas-wrap">
@@ -279,6 +362,24 @@ export function Canvas2D() {
         onDoubleClick={onDoubleClick}
         aria-label="Graph"
       />
+      <TextLayer items={items} view={view} W={size.W} H={size.H} selectedId={selectedId} />
+      {textDraft && (
+        <input
+          ref={draftInput}
+          className="text-draft"
+          style={{ left: textDraft.px, top: textDraft.py }}
+          dir="auto"
+          value={textDraft.value}
+          placeholder={t('textPlaceholder')}
+          aria-label={t('tool.text')}
+          onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitText();
+            else if (e.key === 'Escape') { draftRef.current = null; setTextDraft(null); }
+          }}
+          onBlur={commitText}
+        />
+      )}
       {hint && <ToolHint tool={tool} step={pending.length} onCancel={() => setPending([])} />}
     </div>
   );

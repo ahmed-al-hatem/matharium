@@ -1,6 +1,7 @@
 import type { Resolved, Value, Vec2 } from '../math/types';
 import type { Settings, View } from '../store/project';
 import { fmt } from '../math/solve';
+import { isRtl, labelPlain } from '../math/annotate';
 import { march } from './march';
 import { fmtTick, niceStep, Viewport } from './viewport';
 
@@ -31,7 +32,7 @@ export interface Ctx {
   restore(): void;
 }
 
-export const C = {
+const DARK = {
   bg: '#0D0E0D',
   axis: '#787978',
   text: '#C4C5C4',
@@ -40,19 +41,37 @@ export const C = {
   gridMajor: 'rgba(120,121,120,0.24)',
   accent: '#3282F6',
 };
+/** Paper colors for printed worksheets. */
+const LIGHT: typeof DARK = {
+  bg: '#FFFFFF',
+  axis: '#555655',
+  text: '#222322',
+  bright: '#111211',
+  gridMinor: 'rgba(60,60,60,0.10)',
+  gridMajor: 'rgba(60,60,60,0.26)',
+  accent: '#1F6FE0',
+};
+/** The palette of the drawing in progress (draw() switches it). */
+export const C = { ...DARK };
 
 export const FONT_MONO = "11px 'JetBrains Mono', monospace";
 export const FONT_LABEL = "italic 16px 'STIX Two Text', 'EB Garamond', serif";
+export const FONT_TEXT = "17px 'IBM Plex Sans Arabic', 'STIX Two Text', sans-serif";
 
 export interface Overlay {
   hover?: { p: Vec2; color: string; text: string } | null;
   pending?: Vec2[];
   mouse?: Vec2 | null;
   toolShape?: 'segment' | 'line' | 'circle' | 'polygon' | 'vector' | 'ray' | null;
+  /** pen / arrow being drawn, in world units */
+  sketch?: { pts: Vec2[]; arrow: boolean } | null;
 }
 
 export interface DrawOpts {
   W: number; H: number; view: View; settings: Settings; selectedId: string | null; overlay?: Overlay;
+  /** text annotations are drawn by an HTML layer (KaTeX, Arabic shaping) instead of the canvas */
+  htmlText?: boolean;
+  light?: boolean;
 }
 
 function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
@@ -156,13 +175,13 @@ function seg(ctx: Ctx, vp: Viewport, a: Vec2, b: Vec2) {
   ctx.beginPath(); ctx.moveTo(vp.px(a.x), vp.py(a.y)); ctx.lineTo(vp.px(b.x), vp.py(b.y)); ctx.stroke();
 }
 
-function arrowHead(ctx: Ctx, vp: Viewport, a: Vec2, b: Vec2) {
+function arrowHead(ctx: Ctx, vp: Viewport, a: Vec2, b: Vec2, size = 12) {
   const x2 = vp.px(b.x), y2 = vp.py(b.y);
   const ang = Math.atan2(y2 - vp.py(a.y), x2 - vp.px(a.x));
   ctx.beginPath();
   ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - 12 * Math.cos(ang - 0.4), y2 - 12 * Math.sin(ang - 0.4));
-  ctx.lineTo(x2 - 12 * Math.cos(ang + 0.4), y2 - 12 * Math.sin(ang + 0.4));
+  ctx.lineTo(x2 - size * Math.cos(ang - 0.4), y2 - size * Math.sin(ang - 0.4));
+  ctx.lineTo(x2 - size * Math.cos(ang + 0.4), y2 - size * Math.sin(ang + 0.4));
   ctx.closePath();
   ctx.fill();
 }
@@ -175,6 +194,27 @@ export function dot(ctx: Ctx, x: number, y: number, color: string, r = 4.5, holl
   ctx.lineWidth = hollow ? 2 : 1.2;
   ctx.strokeStyle = hollow ? color : 'rgba(0,0,0,0.6)';
   ctx.stroke();
+}
+
+function polyline(ctx: Ctx, vp: Viewport, pts: Vec2[]) {
+  ctx.beginPath();
+  pts.forEach((p, i) => (i ? ctx.lineTo(vp.px(p.x), vp.py(p.y)) : ctx.moveTo(vp.px(p.x), vp.py(p.y))));
+  ctx.stroke();
+}
+
+function sketch(ctx: Ctx, vp: Viewport, pts: Vec2[], arrow: boolean, width: number) {
+  polyline(ctx, vp, pts);
+  if (arrow && pts.length >= 2) arrowHead(ctx, vp, pts[pts.length - 2], pts[pts.length - 1], 8 + width * 2);
+}
+
+/** Canvas/SVG fallback for a text annotation: LaTeX becomes readable plain text. */
+function drawLabel(ctx: Ctx, vp: Viewport, v: Extract<Value, { type: 'label' }>, color: string) {
+  const x = v.screen ? v.p.x : vp.px(v.p.x), y = v.screen ? v.p.y : vp.py(v.p.y);
+  ctx.font = FONT_TEXT;
+  ctx.fillStyle = color;
+  ctx.textAlign = isRtl(v.text) ? 'right' : 'left';
+  ctx.textBaseline = 'top';
+  labelPlain(v.text).split('\n').forEach((line, i) => ctx.fillText(line, x, y + 2 + i * 22));
 }
 
 function shadeFnIneq(ctx: Ctx, vp: Viewport, f: (x: number) => number, below: boolean) {
@@ -265,6 +305,7 @@ function drawValue(ctx: Ctx, vp: Viewport, v: Value, color: string, width: numbe
       labels.push({ p: { x: mx, y: v.f(mx) / 2 }, text: `${name} = ${fmt(v.value, 3)}`, color });
       return;
     }
+    case 'stroke': sketch(ctx, vp, v.pts, v.arrow, width); return;
     case 'curve': {
       ctx.beginPath();
       let pen = false;
@@ -303,6 +344,7 @@ function labelAnchor(v: Value, vp: Viewport): Vec2 | null {
 }
 
 export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
+  Object.assign(C, o.light ? LIGHT : DARK);
   const vp = new Viewport(o.view, o.W, o.H);
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, o.W, o.H);
@@ -312,6 +354,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
 
   const labels: { p: Vec2; text: string; color: string }[] = [];
   const points: { p: Vec2; color: string; name: string; free: boolean; selected: boolean; hollow?: boolean; label: boolean }[] = [];
+  const texts: { v: Extract<Value, { type: 'label' }>; color: string }[] = [];
 
   for (const r of items) {
     const { obj, value: v } = r;
@@ -322,6 +365,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
     if (v.type === 'point') { points.push({ p: v.p, color: obj.color, name: obj.name, free: v.free, selected, label: showLabel }); continue; }
     if (v.type === 'points') { v.pts.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, label: false })); continue; }
     if (v.type === 'text') { v.pts?.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, hollow: true, label: false })); continue; }
+    if (v.type === 'label') { if (!o.htmlText) texts.push({ v, color: o.light && obj.color === '#DCDCDC' ? C.text : obj.color }); continue; }
     if (selected) {
       ctx.save();
       ctx.globalAlpha = 0.25;
@@ -348,8 +392,15 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
     halo(ctx, l.text, vp.px(l.p.x) + 7, vp.py(l.p.y) - 5);
   }
 
+  for (const t of texts) drawLabel(ctx, vp, t.v, t.color);
+
   const ov = o.overlay;
   if (ov) {
+    if (ov.sketch && ov.sketch.pts.length > 1) {
+      ctx.strokeStyle = C.accent; ctx.fillStyle = C.accent;
+      ctx.lineWidth = 2.5;
+      sketch(ctx, vp, ov.sketch.pts, ov.sketch.arrow, 2.5);
+    }
     if (ov.pending?.length && ov.mouse && ov.toolShape) {
       ctx.strokeStyle = C.accent; ctx.fillStyle = C.accent; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
       const last = ov.pending[ov.pending.length - 1];

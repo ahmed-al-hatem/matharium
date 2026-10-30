@@ -4,6 +4,7 @@ import { useT } from '../i18n/i18n';
 import { exportCSV, exportPNG, exportSVG, newProject, openProject, saveProject, shareLink } from '../io/fileio';
 import { Icon } from './Icons';
 import { install } from '../io/pwa';
+import { saveUserTemplate } from '../io/templates';
 
 const MODES: { id: Mode; icon: () => JSX.Element }[] = [
   { id: 'graphing', icon: Icon.graph },
@@ -22,7 +23,7 @@ function useOutside(open: boolean, close: () => void) {
   return ref;
 }
 
-export function TopBar({ onHelp }: { onHelp(): void }) {
+export function TopBar({ onHelp, onTemplates, onWorksheet }: { onHelp(): void; onTemplates(): void; onWorksheet(): void }) {
   const t = useT();
   const mode = useStore((s) => s.mode);
   const fileName = useStore((s) => s.fileName);
@@ -79,11 +80,17 @@ export function TopBar({ onHelp }: { onHelp(): void }) {
             </div>
             <h3>{t('file')}</h3>
             <button onClick={run(newProject)}><Icon.file />{t('new')}</button>
+            <button onClick={run(onTemplates)}><Icon.template />{t('tpl.new')}</button>
             <button onClick={run(openProject)}><Icon.folder />{t('open')}<kbd>{mod}O</kbd></button>
             <button onClick={run(() => saveProject())}><Icon.save />{t('save')}<kbd>{mod}S</kbd></button>
             <button onClick={run(() => saveProject(true))}><Icon.save />{t('saveAs')}<kbd>{mod}⇧S</kbd></button>
+            <button onClick={run(() => {
+              const name = prompt(t('tpl.name'), fileName === 'Untitled' ? t('untitled') : fileName.replace(/\.(mth|json)$/i, ''));
+              if (name?.trim()) st.notify(saveUserTemplate(name.trim()) ? 'tpl.saved' : 'saveFailed');
+            })}><Icon.template />{t('tpl.saveCurrent')}</button>
             <button onClick={run(openProject)}><Icon.upload />{t('importCsv')}</button>
-            <h3>Export</h3>
+            <h3>{t('export')}</h3>
+            <button onClick={run(onWorksheet)}><Icon.print />{t('worksheetExport')}</button>
             <button onClick={run(exportPNG)}><Icon.image />{t('exportPng')}</button>
             <button onClick={run(exportSVG)}><Icon.image />{t('exportSvg')}</button>
             <button onClick={run(() => exportCSV('table'))}><Icon.download />{t('exportCsv')}</button>

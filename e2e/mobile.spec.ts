@@ -15,3 +15,16 @@ test('phone layout: no horizontal scroll and the graph stays usable with the key
     expect(b.y + b.height, sel).toBeLessThanOrEqual(ih + 1);
   }
 });
+
+test('phone layout: the worksheet preview fits the screen width', async ({ page }) => {
+  await open(page);
+  await addInput(page, 'f(x) = x^2');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.locator('.drawer button', { hasText: 'Worksheet' }).click();
+  const box = (await page.locator('.ws-graph-box').boundingBox())!;
+  const { iw, sw } = await page.evaluate(() => ({ iw: innerWidth, sw: document.querySelector('.ws-root')!.scrollWidth }));
+  expect(sw).toBeLessThanOrEqual(iw);
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(iw + 1);
+  await expect(page.getByRole('button', { name: 'Print / Save as PDF' })).toBeInViewport();
+});

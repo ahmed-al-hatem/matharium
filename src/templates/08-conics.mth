@@ -1,0 +1,104 @@
+{
+  "app": "matharium",
+  "version": 1,
+  "mode": "graphing",
+  "view": {
+    "ox": 0,
+    "oy": 0,
+    "sx": 40,
+    "sy": 40
+  },
+  "settings": {
+    "grid": true,
+    "axes": true,
+    "labels": true,
+    "snap": true,
+    "digits": 2,
+    "range3d": 6
+  },
+  "objects": [
+    {
+      "id": "t0",
+      "name": "a",
+      "input": "a = 3",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": 0.5,
+        "max": 6,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t1",
+      "name": "b",
+      "input": "b = 2",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": 0.5,
+        "max": 6,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t2",
+      "name": "eq1",
+      "input": "eq1: x^2 / a^2 + y^2 / b^2 = 1",
+      "color": "#E45B45",
+      "visible": true
+    },
+    {
+      "id": "t3",
+      "name": "eq2",
+      "input": "eq2: x^2 / a^2 - y^2 / b^2 = 1",
+      "color": "#6DC4AA",
+      "visible": true
+    },
+    {
+      "id": "t4",
+      "name": "eq3",
+      "input": "eq3: y^2 = 4 b x",
+      "color": "#E1B549",
+      "visible": true
+    },
+    {
+      "id": "t5",
+      "name": "F",
+      "input": "F = (sqrt(a^2 + b^2), 0)",
+      "color": "#6DC4AA",
+      "visible": true
+    },
+    {
+      "id": "t6",
+      "name": "E",
+      "input": "E = (-sqrt(a^2 + b^2), 0)",
+      "color": "#6DC4AA",
+      "visible": true
+    },
+    {
+      "id": "t7",
+      "name": "text1",
+      "input": "text1 = Text(\"$\\frac{x^2}{a^2} \\pm \\frac{y^2}{b^2} = 1$\", (24, 64), \"screen\")",
+      "color": "#DCDCDC",
+      "visible": true
+    }
+  ],
+  "sheet": {},
+  "table": {
+    "ids": [],
+    "start": -5,
+    "end": 5,
+    "step": 1
+  },
+  "meta": {
+    "title": {
+      "en": "Conic sections",
+      "ar": "القطوع المخروطية"
+    },
+    "description": {
+      "en": "Ellipse, hyperbola (with its foci E and F) and parabola sharing the parameters a and b.",
+      "ar": "القطع الناقص والقطع الزائد (مع بؤرتيه E وF) والقطع المكافئ بالمعاملين a وb."
+    }
+  }
+}

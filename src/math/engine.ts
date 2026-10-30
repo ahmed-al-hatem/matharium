@@ -3,6 +3,7 @@ import { compileFn, freeSymbols, isKnownName, math, parseExpr, texName, toTex, U
 import { asCommand, asList, asTuple, normalize, splitDefinition, splitRelation } from './parser';
 import { clean, extrema, fmt, fmtPt, integrate, derivative as numDeriv, roots, solveSystem } from './solve';
 import { angle, asLine, circleThrough, dist, implicitOf, intersectGeom, mid, polygonArea, projectOnLine, sub } from './geometry';
+import { parseString } from './annotate';
 import type { Fn1, Fn2, MObj, Resolved, Value, Vec2, Vec3 } from './types';
 
 const VARS = ['x', 'y', 'z', 't'];
@@ -394,6 +395,25 @@ export class Engine {
         const u = A[3].trim(), v = A[6].trim();
         const c = (i: number) => compileFn(this.node(A[i]), [u, v], this.scope) as Fn2;
         return { value: { type: 'psurface', fx: c(0), fy: c(1), fz: c(2), u0: this.num(A[4]), u1: this.num(A[5]), v0: this.num(A[7]), v1: this.num(A[8]) } };
+      }
+      case 'Text': {
+        need(1);
+        const text = parseString(A[0]);
+        if (text === null) throw new EvalError('Text needs a quoted string, e.g. Text("hello", (1, 2))');
+        const screen = A[2] !== undefined && parseString(A[2]) === 'screen';
+        const p = A[1] ? this.pt(A[1]) : { x: 0, y: 0 };
+        return { value: { type: 'label', text, p, screen }, tex: `${texName(selfName)} = \\text{${texEscape(text)}}` };
+      }
+      case 'Stroke': {
+        need(1);
+        const items = A.length === 1 ? asList(A[0]) ?? A : A;
+        const pts = items.map((a) => this.pt(a));
+        if (pts.length < 2) throw new EvalError('Stroke needs at least two points');
+        return { value: { type: 'stroke', pts, arrow: false }, tex: `${texName(selfName)} = \\mathrm{Stroke}\\left(${pts.length}\\right)` };
+      }
+      case 'Arrow': {
+        need(2);
+        return { value: { type: 'stroke', pts: [this.pt(A[0]), this.pt(A[1])], arrow: true } };
       }
       case 'Sphere': {
         need(2);

@@ -4,7 +4,7 @@ import { useT } from '../i18n/i18n';
 import { Viewport } from '../graph2d/viewport';
 import { Icon } from './Icons';
 
-function Modal({ title, onClose, children }: { title: string; onClose(): void; children: React.ReactNode }) {
+export function Modal({ title, onClose, children, wide }: { title: string; onClose(): void; children: React.ReactNode; wide?: boolean }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', h);
@@ -12,7 +12,7 @@ function Modal({ title, onClose, children }: { title: string; onClose(): void; c
   }, [onClose]);
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <h2>{title}<button className="icon-btn" onClick={onClose} aria-label="Close"><Icon.close /></button></h2>
         {children}
       </div>
@@ -97,6 +97,11 @@ const HELP: { key: string; rows: [string, string][] }[] = [
     ['z = x^2 - y^2', 'surface'], ['x^2 + y^2 + z^2 = 4', 'implicit surface'], ['(1, 2, 3)', '3D point'],
     ['Curve(cos(t), sin(t), t/4, t, 0, 4pi)', 'space curve'], ['Sphere((0,0,0), 2)', 'sphere'],
     ['Surface(u, v, u v, u, -2, 2, v, -2, 2)', 'parametric surface'],
+  ] },
+  { key: 'help.annotate', rows: [
+    ['Text("Hello", (1, 2))', 'text on the graph'], ['Text("$\\frac{a}{b}$ نص عربي", (1, 2))', 'LaTeX between $…$, Arabic'],
+    ['Text("Title", (20, 20), "screen")', 'fixed on screen'], ['Text("A", A)', 'text that follows point A'],
+    ['Arrow((0, 0), (2, 1))', 'arrow'], ['Stroke({(0, 0), (1, 1), (2, 0)})', 'freehand stroke (pen tool)'],
   ] },
   { key: 'help.keys', rows: [
     ['Ctrl+Z / Ctrl+Y', 'undo / redo'], ['Ctrl+S / Ctrl+Shift+S', 'save / save as'], ['Ctrl+O', 'open'],

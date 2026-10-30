@@ -1,0 +1,83 @@
+{
+  "app": "matharium",
+  "version": 1,
+  "mode": "graphing",
+  "view": {
+    "ox": 1,
+    "oy": 1.5,
+    "sx": 60,
+    "sy": 60
+  },
+  "settings": {
+    "grid": true,
+    "axes": true,
+    "labels": true,
+    "snap": true,
+    "digits": 2,
+    "range3d": 6
+  },
+  "objects": [
+    {
+      "id": "t0",
+      "name": "f",
+      "input": "f(x) = 0.5x^2 + 1",
+      "color": "#E45B45",
+      "visible": true
+    },
+    {
+      "id": "t1",
+      "name": "a",
+      "input": "a = 0",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -4,
+        "max": 4,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t2",
+      "name": "b",
+      "input": "b = 2",
+      "color": "#3282F6",
+      "visible": true,
+      "slider": {
+        "min": -4,
+        "max": 4,
+        "step": 0.1
+      }
+    },
+    {
+      "id": "t3",
+      "name": "S",
+      "input": "S = Integral(f, a, b)",
+      "color": "#E45B45",
+      "visible": true
+    },
+    {
+      "id": "t4",
+      "name": "text1",
+      "input": "text1 = Text(\"$S = \\int_a^b f(x)\\,dx$\", (24, 64), \"screen\")",
+      "color": "#DCDCDC",
+      "visible": true
+    }
+  ],
+  "sheet": {},
+  "table": {
+    "ids": [],
+    "start": -5,
+    "end": 5,
+    "step": 1
+  },
+  "meta": {
+    "title": {
+      "en": "Area under a curve",
+      "ar": "المساحة تحت منحنى"
+    },
+    "description": {
+      "en": "The definite integral from a to b as the shaded area under f.",
+      "ar": "التكامل المحدد من a إلى b كمساحة مظللة تحت f."
+    }
+  }
+}

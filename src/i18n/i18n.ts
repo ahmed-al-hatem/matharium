@@ -39,6 +39,15 @@ const en: Record<string, string> = {
   'group.basic': 'Basic', 'group.lines': 'Lines', 'group.construct': 'Construct', 'group.measure': 'Measure', 'group.edit': 'Edit',
   'help.title': 'Quick reference', 'help.functions': 'Functions & equations', 'help.commands': 'Commands', 'help.geometry': 'Geometry',
   'help.3d': '3D', 'help.keys': 'Shortcuts',
+  'tool.text': 'Text', 'tool.pen': 'Pen', 'tool.arrow': 'Arrow',
+  'toolHelp.text': 'Click on the graph, then type (LaTeX between $…$)', 'toolHelp.pen': 'Drag to draw freehand', 'toolHelp.arrow': 'Drag from the tail to the tip',
+  'group.annotate': 'Annotate', textPlaceholder: 'Text or $x^2$…', pinScreen: 'Pin to screen', pinGraph: 'Pin to graph',
+  'help.annotate': 'Text & drawing', export: 'Export',
+  worksheet: 'Worksheet', worksheetExport: 'Worksheet (print / PDF)…', 'ws.answers': 'Answer space', 'ws.print': 'Print / Save as PDF',
+  'ws.name': 'Name', 'ws.date': 'Date', 'ws.equations': 'Equations', 'ws.notes': 'Notes', 'ws.notesHint': 'Click to write notes or questions…',
+  'ws.answerSpace': 'Answers',
+  'tpl.title': 'New from template', 'tpl.new': 'New from template…', 'tpl.saveCurrent': 'Save as template…', 'tpl.name': 'Template name',
+  'tpl.saved': 'Template saved in this browser', 'tpl.mine': 'My templates', 'tpl.none': 'Templates you save appear here.',
   untitled: 'Untitled', empty: 'Type a function, equation, point or command',
 };
 
@@ -80,6 +89,15 @@ const ar: Record<string, string> = {
   'group.basic': 'أساسي', 'group.lines': 'المستقيمات', 'group.construct': 'إنشاء', 'group.measure': 'قياس', 'group.edit': 'تحرير',
   'help.title': 'مرجع سريع', 'help.functions': 'الدوال والمعادلات', 'help.commands': 'الأوامر', 'help.geometry': 'الهندسة',
   'help.3d': 'ثلاثي الأبعاد', 'help.keys': 'الاختصارات',
+  'tool.text': 'نص', 'tool.pen': 'قلم', 'tool.arrow': 'سهم',
+  'toolHelp.text': 'انقر على الرسم ثم اكتب (LaTeX بين $…$)', 'toolHelp.pen': 'اسحب للرسم الحر', 'toolHelp.arrow': 'اسحب من بداية السهم إلى رأسه',
+  'group.annotate': 'تعليقات', textPlaceholder: 'نص أو $x^2$…', pinScreen: 'تثبيت على الشاشة', pinGraph: 'تثبيت على الرسم',
+  'help.annotate': 'النصوص والرسم', export: 'تصدير',
+  worksheet: 'ورقة عمل', worksheetExport: 'ورقة عمل (طباعة / PDF)…', 'ws.answers': 'مساحة للإجابات', 'ws.print': 'طباعة / حفظ PDF',
+  'ws.name': 'الاسم', 'ws.date': 'التاريخ', 'ws.equations': 'المعادلات', 'ws.notes': 'ملاحظات', 'ws.notesHint': 'انقر لكتابة ملاحظات أو أسئلة…',
+  'ws.answerSpace': 'الإجابات',
+  'tpl.title': 'جديد من قالب', 'tpl.new': 'جديد من قالب…', 'tpl.saveCurrent': 'حفظ كقالب…', 'tpl.name': 'اسم القالب',
+  'tpl.saved': 'حُفظ القالب في هذا المتصفح', 'tpl.mine': 'قوالبي', 'tpl.none': 'تظهر هنا القوالب التي تحفظها.',
   untitled: 'بدون عنوان', empty: 'اكتب دالة أو معادلة أو نقطة أو أمرًا',
 };
 
