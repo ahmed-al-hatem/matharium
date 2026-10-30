@@ -1,5 +1,5 @@
 import type { MathNode } from 'mathjs';
-import { compileFn, freeSymbols, isKnownName, math, parseExpr, texName, toTex, UndefinedSymbolError, type Scope } from './compile';
+import { compileFn, freeSymbols, isKnownName, math, parseExpr, setAngleUnit, texName, toTex, UndefinedSymbolError, type AngleUnit, type Scope } from './compile';
 import { asCommand, asList, asTuple, normalize, splitDefinition, splitRelation } from './parser';
 import { clean, extrema, fmt, fmtPt, integrate, derivative as numDeriv, roots, solveSystem } from './solve';
 import { angle, asLine, canHostPoint, circleThrough, dist, implicitOf, intersectGeom, mid, paramRange, pointAt, polygonArea, projectOnLine, sub } from './geometry';
@@ -40,9 +40,11 @@ export class Engine {
   /** All objects and the spreadsheet, for commands that look beyond their arguments (Locus, A1:A9 ranges). */
   objs: MObj[] = [];
   sheet: Record<string, string> = {};
-  constructor(public digits = 4) {}
+  constructor(public digits = 4, public opts: EvalOptions = {}) {}
 
-  private f(v: number) { return fmt(v, this.digits); }
+  private f(v: number) { return fmt(v, this.digits, this.opts.sigFigs); }
+  private fp(p: Vec2) { return fmtPt(p, this.digits, this.opts.sigFigs); }
+  private get deg() { return this.opts.angle === 'deg'; }
 
   register(name: string, v: Value) {
     this.values.set(name, v);
@@ -52,7 +54,7 @@ export class Engine {
       case 'integral': case 'riemann': case 'between': s[name] = v.value; break;
       case 'bars': if (v.value !== undefined) s[name] = v.value; break;
       case 'numbers': s[name] = v.values; break;
-      case 'angle': s[name] = v.value; break;
+      case 'angle': s[name] = this.deg ? (v.value * 180) / Math.PI : v.value; break;
       case 'function': {
         s[name] = v.f;
         // f' and f'' are built on first use: symbolic derivatives are slow and rarely needed
@@ -158,7 +160,7 @@ export class Engine {
     const s = src.trim();
     const range = /^([A-L])([1-9]\d*):([A-L])([1-9]\d*)$/.exec(s);
     if (range) {
-      const cells = evalSheet(this.sheet, this.scope);
+      const cells = evalSheet(this.sheet, this.scope, this.opts.angle);
       const out: number[] = [];
       const [c1, c2] = [range[1], range[3]].map((c) => c.charCodeAt(0)).sort((a, b) => a - b);
       const [r1, r2] = [+range[2], +range[4]].sort((a, b) => a - b);
@@ -184,11 +186,11 @@ export class Engine {
     const free = parts.every((p) => NUM_LITERAL.test(p));
     const c = parts.map((p) => clean(this.num(p)));
     if (c.length === 3) return { value: { type: 'point3d', p: { x: c[0], y: c[1], z: c[2] } }, display: `(${c.map((v) => this.f(v)).join(', ')})` };
-    return { value: { type: 'point', p: { x: c[0], y: c[1] }, free }, display: free ? undefined : fmtPt({ x: c[0], y: c[1] }, this.digits) };
+    return { value: { type: 'point', p: { x: c[0], y: c[1] }, free }, display: free ? undefined : this.fp({ x: c[0], y: c[1] }) };
   }
 
   ptsDisplay(pts: Vec2[]) {
-    return pts.length ? pts.map((p) => fmtPt(p, this.digits)).join(', ') : 'none';
+    return pts.length ? pts.map((p) => this.fp(p)).join(', ') : 'none';
   }
 
   // ---------- commands ----------
@@ -395,7 +397,7 @@ export class Engine {
         const q = pointAt(target, t);
         if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) throw new EvalError('The point is outside the object');
         const p = { x: clean(q.x), y: clean(q.y) };
-        return { value: { type: 'point', p, free: false, on: { src, target, t } }, display: fmtPt(p, this.digits) };
+        return { value: { type: 'point', p, free: false, on: { src, target, t } }, display: this.fp(p) };
       }
       case 'Locus': {
         need(2);
@@ -424,7 +426,7 @@ export class Engine {
         for (let i = 0; i <= N; i++) {
           const t = t0 + ((t1 - t0) * i) / N;
           const moved = [...deps].map((o) => (o === pObj ? { ...o, input: `${pName} = Point(${on.src}, ${t})` } : o));
-          const q = run(moved, this.digits, this.sheet).results.find((r) => r.obj.id === qObj.id)?.value;
+          const q = run(moved, this.digits, this.sheet, this.opts).results.find((r) => r.obj.id === qObj.id)?.value;
           pts.push(q?.type === 'point' ? q.p : { x: NaN, y: NaN });
         }
         if (!pts.some((p) => Number.isFinite(p.x))) throw new EvalError(`${qName} must be a point`);
@@ -461,12 +463,12 @@ export class Engine {
           const v = this.obj(A[0]);
           if (v?.type === 'point3d') return { value: { type: 'vector3d', a: { x: 0, y: 0, z: 0 }, b: v.p } };
           const b = this.pt(A[0]);
-          return { value: { type: 'vector', a: { x: 0, y: 0 }, b }, display: fmtPt(b, this.digits) };
+          return { value: { type: 'vector', a: { x: 0, y: 0 }, b }, display: this.fp(b) };
         }
         const va = this.obj(A[0]), vb = this.obj(A[1]);
         if (va?.type === 'point3d' || vb?.type === 'point3d') return { value: { type: 'vector3d', a: this.pt3(A[0]), b: this.pt3(A[1]) } };
         const a = this.pt(A[0]), b = this.pt(A[1]);
-        return { value: { type: 'vector', a, b }, display: fmtPt(sub(b, a), this.digits) };
+        return { value: { type: 'vector', a, b }, display: this.fp(sub(b, a)) };
       }
       case 'Circle': {
         need(2);
@@ -490,7 +492,7 @@ export class Engine {
         let p: Vec2;
         if (A.length === 1) { const v = this.obj(A[0]); if (v?.type !== 'segment') throw new EvalError('Expected a segment'); p = mid(v.a, v.b); }
         else p = mid(this.pt(A[0]), this.pt(A[1]));
-        return { value: { type: 'point', p, free: false }, display: fmtPt(p, this.digits) };
+        return { value: { type: 'point', p, free: false }, display: this.fp(p) };
       }
       case 'Perpendicular': case 'Parallel': {
         need(2);
@@ -516,7 +518,7 @@ export class Engine {
         need(3);
         const a = this.pt(A[0]), b = this.pt(A[1]), c = this.pt(A[2]);
         const value = angle(a, b, c);
-        return { value: { type: 'angle', a, b, c, value }, display: `= ${this.f((value * 180) / Math.PI)}°` };
+        return { value: { type: 'angle', a, b, c, value }, display: this.deg ? `= ${this.f((value * 180) / Math.PI)}°` : `= ${this.f(value)} rad` };
       }
       case 'Area': {
         need(1);
@@ -550,22 +552,22 @@ export class Engine {
         const l = m && asLine(m);
         const q = l ? projectOnLine(p, l) : this.pt(A[1]);
         const r = { x: 2 * q.x - p.x, y: 2 * q.y - p.y };
-        return { value: { type: 'point', p: r, free: false }, display: fmtPt(r, this.digits) };
+        return { value: { type: 'point', p: r, free: false }, display: this.fp(r) };
       }
       case 'Rotate': {
         need(2);
-        const p = this.pt(A[0]); const th = this.num(A[1]);
+        const p = this.pt(A[0]); const th = this.num(A[1]) * (this.deg ? Math.PI / 180 : 1);
         const c = A[2] ? this.pt(A[2]) : { x: 0, y: 0 };
         const dx = p.x - c.x, dy = p.y - c.y;
         const r = { x: clean(c.x + dx * Math.cos(th) - dy * Math.sin(th)), y: clean(c.y + dx * Math.sin(th) + dy * Math.cos(th)) };
-        return { value: { type: 'point', p: r, free: false }, display: fmtPt(r, this.digits) };
+        return { value: { type: 'point', p: r, free: false }, display: this.fp(r) };
       }
       case 'Translate': {
         need(2);
         const p = this.pt(A[0]); const v = this.obj(A[1]);
         const d = v?.type === 'vector' ? sub(v.b, v.a) : this.pt(A[1]);
         const r = { x: p.x + d.x, y: p.y + d.y };
-        return { value: { type: 'point', p: r, free: false }, display: fmtPt(r, this.digits) };
+        return { value: { type: 'point', p: r, free: false }, display: this.fp(r) };
       }
       case 'Curve': {
         need(5);
@@ -708,17 +710,21 @@ export class Engine {
 }
 
 /** Evaluate all objects, resolving dependencies regardless of order. */
-export function evaluateAll(objs: MObj[], digits = 4, sheet: Record<string, string> = {}): Resolved[] {
-  return run(objs, digits, sheet).results;
+export function evaluateAll(objs: MObj[], digits = 4, sheet: Record<string, string> = {}, opts: EvalOptions = {}): Resolved[] {
+  return run(objs, digits, sheet, opts).results;
 }
 
 /** Names → numbers / functions / points, for evaluating spreadsheet formulas. */
-export function evaluateScope(objs: MObj[]): Scope {
-  return run(objs, 4).eng.scope;
+export function evaluateScope(objs: MObj[], opts: EvalOptions = {}): Scope {
+  return run(objs, 4, {}, opts).eng.scope;
 }
 
-function run(objs: MObj[], digits: number, sheet: Record<string, string> = {}): { results: Resolved[]; eng: Engine } {
-  const eng = new Engine(digits);
+/** Display and angle options from Settings. */
+export interface EvalOptions { sigFigs?: boolean; angle?: AngleUnit }
+
+function run(objs: MObj[], digits: number, sheet: Record<string, string> = {}, opts: EvalOptions = {}): { results: Resolved[]; eng: Engine } {
+  setAngleUnit(opts.angle ?? 'rad');
+  const eng = new Engine(digits, opts);
   eng.objs = objs;
   eng.sheet = sheet;
   const res = new Map<string, Resolved>();

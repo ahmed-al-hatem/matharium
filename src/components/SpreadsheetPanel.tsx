@@ -15,11 +15,13 @@ export function SpreadsheetPanel() {
   const sheet = useStore((s) => s.sheet);
   const objects = useStore((s) => s.objects);
   const digits = useStore((s) => s.settings.digits);
+  const sigFigs = useStore((s) => s.settings.sigFigs);
+  const angle = useStore((s) => s.settings.angle);
   const [sel, setSel] = useState('A1');
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const scope = useMemo(() => evaluateScope(objects), [objects]);
-  const values = useMemo(() => evalSheet(sheet, scope), [sheet, scope]);
+  const scope = useMemo(() => evaluateScope(objects, { angle }), [objects, angle]);
+  const values = useMemo(() => evalSheet(sheet, scope, angle), [sheet, scope, angle]);
   const st = useStore.getState;
 
   const startEdit = (ref: string, initial?: string) => { setSel(ref); setEditing(ref); setDraft(initial ?? sheet[ref] ?? ''); };
@@ -99,7 +101,7 @@ export function SpreadsheetPanel() {
                         <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') commit(ref, draft); if (e.key === 'Escape') setEditing(null); }}
                           onBlur={() => editing === ref && commit(ref, draft, false)} />
-                      ) : cell ? (typeof cell.v === 'number' ? fmt(cell.v, digits) : cell.v) : ''}
+                      ) : cell ? (typeof cell.v === 'number' ? fmt(cell.v, digits, sigFigs) : cell.v) : ''}
                     </td>
                   );
                 })}

@@ -48,6 +48,7 @@ export function Canvas2D() {
   const items = useResolved();
   const view = useStore((s) => s.view);
   const settings = useStore((s) => s.settings);
+  const mode = useStore((s) => s.mode);
   const selectedId = useStore((s) => s.selectedId);
   const tool = useStore((s) => s.tool);
   const [hover, setHover] = useState<Overlay['hover']>(null);
@@ -80,10 +81,10 @@ export function Canvas2D() {
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw(ctx, items, {
-      W: size.W, H: size.H, view, settings, selectedId,
+      W: size.W, H: size.H, view, settings, selectedId, mode,
       overlay: { hover, pending: pending.map((p) => p.p), mouse, toolShape: spec?.shape ?? null },
     });
-  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady]);
+  }, [items, view, settings, selectedId, hover, pending, mouse, size, spec, fontsReady, mode]);
 
   // exporters
   useEffect(() => {
@@ -92,15 +93,15 @@ export function Canvas2D() {
       c.width = size.W * 2; c.height = size.H * 2;
       const ctx = c.getContext('2d')!;
       ctx.scale(2, 2);
-      draw(ctx, items, { W: size.W, H: size.H, view, settings, selectedId: null });
+      draw(ctx, items, { W: size.W, H: size.H, view, settings, selectedId: null, mode });
       return c.toDataURL('image/png');
     };
     exporters.svg = () => {
       const s = new SvgCtx(size.W, size.H);
-      draw(s, items, { W: size.W, H: size.H, view, settings, selectedId: null });
+      draw(s, items, { W: size.W, H: size.H, view, settings, selectedId: null, mode });
       return s.toString();
     };
-  }, [items, view, settings, size]);
+  }, [items, view, settings, size, mode]);
 
   const local = (e: { clientX: number; clientY: number }) => {
     const r = canvas.current!.getBoundingClientRect();

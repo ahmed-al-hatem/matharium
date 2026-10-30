@@ -1,5 +1,5 @@
 import type { Resolved, Value, Vec2 } from '../math/types';
-import type { Settings, View } from '../store/project';
+import { labelDefault, type Mode, type Settings, type View } from '../store/project';
 import { fmt } from '../math/solve';
 import { riemannStrip } from '../math/calculus';
 import { march } from './march';
@@ -42,8 +42,13 @@ export const C = {
   accent: '#3282F6',
 };
 
-export const FONT_MONO = "11px 'JetBrains Mono', monospace";
-export const FONT_LABEL = "italic 16px 'STIX Two Text', 'EB Garamond', serif";
+// rescaled by draw() to follow the font-size setting (14px = 1)
+let FONT_MONO = "11px 'JetBrains Mono', monospace";
+let FONT_LABEL = "italic 16px 'STIX Two Text', 'EB Garamond', serif";
+function setFontScale(k: number) {
+  FONT_MONO = `${+(11 * k).toFixed(1)}px 'JetBrains Mono', monospace`;
+  FONT_LABEL = `italic ${+(16 * k).toFixed(1)}px 'STIX Two Text', 'EB Garamond', serif`;
+}
 
 export interface Overlay {
   hover?: { p: Vec2; color: string; text: string } | null;
@@ -54,6 +59,8 @@ export interface Overlay {
 
 export interface DrawOpts {
   W: number; H: number; view: View; settings: Settings; selectedId: string | null; overlay?: Overlay;
+  /** For the automatic label rule (Geometry labels everything); defaults to graphing. */
+  mode?: Mode;
 }
 
 function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
@@ -84,9 +91,10 @@ function drawGrid(ctx: Ctx, vp: Viewport, s: Settings) {
   ctx.beginPath(); ctx.moveTo(ay, 0); ctx.lineTo(ay - 4, 9); ctx.lineTo(ay + 4, 9); ctx.closePath(); ctx.fill();
   ctx.font = FONT_LABEL;
   ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-  ctx.fillText('x', vp.W - 6, ax + 8);
+  const names = s.axisLabels ?? { x: 'x', y: 'y' };
+  ctx.fillText(names.x, vp.W - 6, ax + 8);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('y', ay + 8, 4);
+  ctx.fillText(names.y, ay + 8, 4);
 
   ctx.font = FONT_MONO;
   ctx.fillStyle = C.axis;
@@ -403,6 +411,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
   ctx.fillRect(0, 0, o.W, o.H);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  setFontScale((o.settings.fontSize ?? 14) / 14);
   drawGrid(ctx, vp, o.settings);
 
   const labels: { p: Vec2; text: string; color: string }[] = [];
@@ -413,7 +422,7 @@ export function draw(ctx: Ctx, items: Resolved[], o: DrawOpts) {
     if (!v || !obj.visible) continue;
     const selected = o.selectedId === obj.id;
     const width = (obj.lineWidth ?? 2.5) + (selected ? 1 : 0);
-    const showLabel = obj.showLabel ?? o.settings.labels;
+    const showLabel = obj.showLabel ?? labelDefault(o.settings, o.mode ?? 'graphing', v.type === 'point');
     if (v.type === 'point') { points.push({ p: v.p, color: obj.color, name: obj.name, free: v.free || !!v.on, selected, label: showLabel }); continue; }
     if (v.type === 'points') { v.pts.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, label: false })); continue; }
     if (v.type === 'text') { v.pts?.forEach((p) => points.push({ p, color: obj.color, name: '', free: false, selected, hollow: true, label: false })); continue; }

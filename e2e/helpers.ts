@@ -80,3 +80,17 @@ export async function downloadText(d: Download) {
 export async function downloadBytes(d: Download) {
   return readFile((await d.path())!);
 }
+
+/** Open Settings from the gear, optionally on a tab (by its accessible name). */
+export async function openSettings(page: Page, tab?: string) {
+  await page.locator('.stage-gear button').click();
+  if (tab) await page.getByRole('tab', { name: tab }).click();
+}
+
+/** Switch the interface language from Settings → General. */
+export async function setLanguage(page: Page, lang: 'en' | 'ar') {
+  await page.locator('.stage-gear button').click();
+  await page.getByRole('tab').first().click();
+  await page.locator('#spanel-general select').first().selectOption(lang);
+  await page.keyboard.press('Escape');
+}

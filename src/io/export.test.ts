@@ -4,6 +4,7 @@ import { draw } from '../graph2d/renderer';
 import { SvgCtx } from '../graph2d/svgctx';
 import { evalSheet } from '../math/sheet';
 import type { MObj } from '../math/types';
+import { DEFAULT_SETTINGS } from '../store/project';
 
 const objs: MObj[] = [
   { id: '1', name: 'f', input: 'f(x) = x^2 - 2', color: '#E45B45', visible: true },
@@ -17,7 +18,7 @@ describe('svg export', () => {
     const ctx = new SvgCtx(400, 300);
     draw(ctx, evaluateAll(objs), {
       W: 400, H: 300, view: { ox: 0, oy: 0, sx: 40, sy: 40 }, selectedId: null,
-      settings: { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' },
+      settings: { ...DEFAULT_SETTINGS, labels: 'all' },
     });
     const svg = ctx.toString();
     expect(svg.startsWith('<svg')).toBe(true);

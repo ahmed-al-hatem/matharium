@@ -1,11 +1,11 @@
-import { math, type Scope } from './compile';
+import { angleScope, math, type AngleUnit, type Scope } from './compile';
 
 export type Cell = { v: number | string; err?: boolean; text?: boolean };
 
 const CELL_RE = /\b([A-L])([1-9]\d*)\b/g;
 
 /** Evaluate every non-empty cell, following references with cycle detection. */
-export function evalSheet(sheet: Record<string, string>, scope: Scope): Record<string, Cell> {
+export function evalSheet(sheet: Record<string, string>, scope: Scope, angle: AngleUnit = 'rad'): Record<string, Cell> {
   const out: Record<string, Cell> = {};
   const visiting = new Set<string>();
   const get = (ref: string): Cell => {
@@ -23,7 +23,7 @@ export function evalSheet(sheet: Record<string, string>, scope: Scope): Record<s
           return `[${refs.join(',')}]`;
         });
         expr = expr.replace(/\b(Sum|Mean|Min|Max|Median)\(/g, (_m, f: string) => `${f.toLowerCase()}(`);
-        const local: Record<string, unknown> = { ...scope };
+        const local: Record<string, unknown> = { ...angleScope(angle), ...scope };
         for (const m of expr.matchAll(CELL_RE)) {
           const c = get(m[0]);
           if (c.err) throw new Error('ref');

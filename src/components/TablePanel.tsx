@@ -11,6 +11,7 @@ export function TablePanel() {
   const items = useResolved();
   const table = useStore((s) => s.table);
   const digits = useStore((s) => s.settings.digits);
+  const sigFigs = useStore((s) => s.settings.sigFigs);
   const setTable = useStore((s) => s.setTable);
   const fns = items.filter((r) => r.value?.type === 'function');
   const chosen = fns.filter((r) => table.ids.includes(r.obj.id));
@@ -51,8 +52,8 @@ export function TablePanel() {
           <tbody>
             {xs.map((x) => (
               <tr key={x}>
-                <td>{fmt(x, digits)}</td>
-                {active.map((r) => <td key={r.obj.id}>{fmt((r.value as { f: (x: number) => number }).f(x), digits)}</td>)}
+                <td>{fmt(x, digits, sigFigs)}</td>
+                {active.map((r) => <td key={r.obj.id}>{fmt((r.value as { f: (x: number) => number }).f(x), digits, sigFigs)}</td>)}
               </tr>
             ))}
           </tbody>

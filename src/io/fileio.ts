@@ -133,7 +133,7 @@ const csvCell = (v: string | number) => (/[",\n]/.test(String(v)) ? `"${String(v
 
 export function tableRows(): (string | number)[][] {
   const st = useStore.getState();
-  const res = evaluateAll(st.objects, st.settings.digits, st.sheet);
+  const res = evaluateAll(st.objects, st.settings.digits, st.sheet, { sigFigs: st.settings.sigFigs, angle: st.settings.angle });
   const fns = res.filter((r) => st.table.ids.includes(r.obj.id) && r.value?.type === 'function');
   const { start, end, step } = st.table;
   const rows: (string | number)[][] = [['x', ...fns.map((r) => `${r.obj.name}(x)`)]];
@@ -191,7 +191,7 @@ export function startAutosave() {
   let t: number | undefined;
   useStore.subscribe((s, prev) => {
     if (s.settings.lang !== prev.settings.lang) try { localStorage.setItem('matharium.lang', s.settings.lang); } catch { /* ignore */ }
-    if (s.objects === prev.objects && s.sheet === prev.sheet && s.view === prev.view && s.mode === prev.mode) return;
+    if (s.objects === prev.objects && s.sheet === prev.sheet && s.view === prev.view && s.mode === prev.mode && s.settings === prev.settings) return;
     clearTimeout(t);
     t = window.setTimeout(() => {
       try { localStorage.setItem(AUTOSAVE, JSON.stringify({ project: s.toFile(), fileName: s.fileName })); } catch { /* ignore */ }

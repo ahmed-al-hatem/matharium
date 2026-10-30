@@ -3,11 +3,11 @@ import { evaluateAll, missingSymbols } from './engine';
 import { draw, type Ctx } from '../graph2d/renderer';
 import { SvgCtx } from '../graph2d/svgctx';
 import type { MObj } from './types';
-import type { View } from '../store/project';
+import { DEFAULT_SETTINGS, type Settings, type View } from '../store/project';
 
 let id = 0;
 const o = (input: string, name = `o${id}`): MObj => ({ id: String(id++), name, input, color: '#E45B45', visible: true });
-const settings = { grid: true, axes: true, labels: true, snap: true, digits: 4, range3d: 6, lang: 'en' as const };
+const settings: Settings = { ...DEFAULT_SETTINGS, labels: 'all' };
 
 describe('engine never throws on odd input', () => {
   const odd = [

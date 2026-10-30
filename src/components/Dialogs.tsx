@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useStore } from '../store/project';
+import { useEffect, useRef, useState } from 'react';
+import { useStore, type LabelMode, type SettingsTab } from '../store/project';
 import { useT } from '../i18n/i18n';
 import { Viewport } from '../graph2d/viewport';
 import { Icon } from './Icons';
@@ -21,59 +21,172 @@ function Modal({ title, onClose, children }: { title: string; onClose(): void; c
   );
 }
 
-export function SettingsDialog() {
+const TABS: SettingsTab[] = ['general', 'graphics', '3d'];
+
+export function SettingsDialog({ tab }: { tab: SettingsTab }) {
+  const t = useT();
+  const lang = useStore((x) => x.settings.lang);
+  const st = useStore.getState();
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const close = () => st.closeSettings();
+  const select = (i: number) => {
+    const next = TABS[(i + TABS.length) % TABS.length];
+    st.openSettings(next);
+    tabRefs.current[TABS.indexOf(next)]?.focus();
+  };
+  const onTabKey = (e: React.KeyboardEvent) => {
+    const i = TABS.indexOf(tab);
+    const fwd = lang === 'ar' ? 'ArrowLeft' : 'ArrowRight', back = lang === 'ar' ? 'ArrowRight' : 'ArrowLeft';
+    if (e.key === fwd) select(i + 1);
+    else if (e.key === back) select(i - 1);
+    else if (e.key === 'Home') select(0);
+    else if (e.key === 'End') select(TABS.length - 1);
+    else return;
+    e.preventDefault();
+  };
+
+  return (
+    <Modal title={t('settings')} onClose={close}>
+      <div className="tabs" role="tablist" aria-label={t('settings')} onKeyDown={onTabKey}>
+        {TABS.map((id, i) => (
+          <button key={id} ref={(el) => { tabRefs.current[i] = el; }} role="tab" id={`stab-${id}`} aria-controls={`spanel-${id}`}
+            aria-selected={tab === id} tabIndex={tab === id ? 0 : -1} className={tab === id ? 'active' : ''} onClick={() => st.openSettings(id)}>
+            {t(`tab.${id}`)}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`spanel-${tab}`} aria-labelledby={`stab-${tab}`} className="tab-panel">
+        {tab === 'general' && <GeneralTab />}
+        {tab === 'graphics' && <GraphicsTab />}
+        {tab === '3d' && <View3DTab />}
+      </div>
+      <div className="modal-actions"><button className="pill-btn" onClick={close}>{t('close')}</button></div>
+    </Modal>
+  );
+}
+
+function Check({ k, label }: { k: 'grid' | 'axes' | 'snap' | 'axes3d' | 'plane3d' | 'grid3d'; label: string }) {
+  const t = useT();
+  const v = useStore((x) => x.settings[k]);
+  return <label className="check"><input type="checkbox" checked={v} onChange={(e) => useStore.getState().setSettings({ [k]: e.target.checked })} />{t(label)}</label>;
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="settings-row"><span>{label}</span>{children}</label>;
+}
+
+function GeneralTab() {
+  const t = useT();
+  const s = useStore((x) => x.settings);
+  const set = useStore.getState().setSettings;
+  // TODO(A1): "exact or decimal results by default" goes here once session A1 is merged
+  return (
+    <>
+      <Field label={t('language')}>
+        <select className="field" value={s.lang} onChange={(e) => set({ lang: e.target.value as 'en' | 'ar' })}>
+          <option value="en">English</option><option value="ar">العربية</option>
+        </select>
+      </Field>
+      <div className="settings-row"><span id="rounding-label">{t('rounding')}</span>
+        <div className="pair" role="group" aria-labelledby="rounding-label">
+          <select className="field" value={s.digits} aria-label={t(s.sigFigs ? 'round.sig' : 'round.decimals')} onChange={(e) => set({ digits: +e.target.value })}>
+            {[0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15].filter((d) => !s.sigFigs || d > 0).map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <select className="field" value={s.sigFigs ? 'sig' : 'dec'} aria-label={t('roundingKind')}
+            onChange={(e) => set({ sigFigs: e.target.value === 'sig', digits: e.target.value === 'sig' ? Math.max(1, s.digits) : s.digits })}>
+            <option value="dec">{t('round.decimals')}</option><option value="sig">{t('round.sig')}</option>
+          </select>
+        </div>
+      </div>
+      <Field label={t('angleUnit')}>
+        <select className="field" value={s.angle} onChange={(e) => set({ angle: e.target.value as 'deg' | 'rad' })}>
+          <option value="rad">{t('angle.rad')}</option><option value="deg">{t('angle.deg')}</option>
+        </select>
+      </Field>
+      <Field label={t('fontSize')}>
+        <select className="field" value={s.fontSize} onChange={(e) => set({ fontSize: +e.target.value })}>
+          {[12, 14, 16, 18, 20].map((n) => <option key={n} value={n}>{n} px</option>)}
+        </select>
+      </Field>
+      <Field label={t('labels')}>
+        <select className="field" value={s.labels} onChange={(e) => set({ labels: e.target.value as LabelMode })}>
+          {(['auto', 'points', 'all', 'none'] as const).map((m) => <option key={m} value={m}>{t(`labels.${m}`)}</option>)}
+        </select>
+      </Field>
+    </>
+  );
+}
+
+function GraphicsTab() {
   const t = useT();
   const s = useStore((x) => x.settings);
   const view = useStore((x) => x.view);
-  const mode = useStore((x) => x.mode);
   const st = useStore.getState();
   const stage = document.querySelector('.stage');
   const W = stage?.clientWidth ?? 800, H = stage?.clientHeight ?? 600;
   const vp = new Viewport(view, W, H);
   const [rng, setRng] = useState({ xmin: +vp.xmin.toFixed(2), xmax: +vp.xmax.toFixed(2), ymin: +vp.ymin.toFixed(2), ymax: +vp.ymax.toFixed(2) });
-  const close = () => st.setSettingsOpen(false);
+  const ratio = +(view.sx / view.sy).toPrecision(4);
 
   const applyRange = () => {
     if (rng.xmax <= rng.xmin || rng.ymax <= rng.ymin) return;
     st.setView({ ox: (rng.xmin + rng.xmax) / 2, oy: (rng.ymin + rng.ymax) / 2, sx: W / (rng.xmax - rng.xmin), sy: H / (rng.ymax - rng.ymin) });
   };
-
-  const check = (key: 'grid' | 'axes' | 'labels' | 'snap') => (
-    <label className="check"><input type="checkbox" checked={s[key]} onChange={(e) => st.setSettings({ [key]: e.target.checked })} />{t(key)}</label>
-  );
+  // x:y is how many y units take the screen length of one x unit; keep x and the centre, stretch y
+  const setRatio = (r: number) => {
+    if (!(r > 0) || r === ratio) return;
+    const next = { ...view, sy: view.sx / r };
+    st.setView({ sy: next.sy });
+    const v = new Viewport(next, W, H);
+    setRng({ ...rng, ymin: +v.ymin.toFixed(2), ymax: +v.ymax.toFixed(2) });
+  };
+  const setAxisLabel = (axis: 'x' | 'y', v: string) => st.setSettings({ axisLabels: { ...s.axisLabels, [axis]: v } });
 
   return (
-    <Modal title={t('settings')} onClose={close}>
-      <h3>{t('view')}</h3>
-      {check('grid')}{check('axes')}{check('labels')}{mode !== '3d' && check('snap')}
-      {mode !== '3d' ? (
-        <>
-          <div className="form-row"><span>{t('xRange')}</span>
-            <input className="field" type="number" step="any" value={rng.xmin} onChange={(e) => setRng({ ...rng, xmin: +e.target.value })} aria-label="x min" />
-            <input className="field" type="number" step="any" value={rng.xmax} onChange={(e) => setRng({ ...rng, xmax: +e.target.value })} aria-label="x max" />
-          </div>
-          <div className="form-row"><span>{t('yRange')}</span>
-            <input className="field" type="number" step="any" value={rng.ymin} onChange={(e) => setRng({ ...rng, ymin: +e.target.value })} aria-label="y min" />
-            <input className="field" type="number" step="any" value={rng.ymax} onChange={(e) => setRng({ ...rng, ymax: +e.target.value })} aria-label="y max" />
-          </div>
-          <button className="ghost-btn" onClick={applyRange}>{t('apply')}</button>
-        </>
-      ) : (
-        <div className="form-row"><span>{t('range3d')}</span>
-          <input className="field" type="number" min={1} max={100} value={s.range3d} onChange={(e) => +e.target.value >= 1 && st.setSettings({ range3d: +e.target.value })} />
-        </div>
-      )}
-      <h3>{t('general')}</h3>
-      <div className="form-row"><span>{t('digits')}</span>
-        <select className="field" value={s.digits} onChange={(e) => st.setSettings({ digits: +e.target.value })}>
-          {[0, 1, 2, 3, 4, 5, 6, 8, 10].map((d) => <option key={d} value={d}>{d}</option>)}
+    <>
+      <Check k="axes" label="axes" /><Check k="grid" label="grid" /><Check k="snap" label="snap" />
+      <Field label={t('gridType')}>
+        <select className="field" value="majorMinor" disabled title={t('moreSoon')}>
+          <option value="majorMinor">{t('gridType.majorMinor')}</option>
         </select>
-        <select className="field" value={s.lang} onChange={(e) => st.setSettings({ lang: e.target.value as 'en' | 'ar' })} aria-label="Language">
-          <option value="en">English</option><option value="ar">العربية</option>
-        </select>
+      </Field>
+      <div className="form-row"><span>{t('xRange')}</span>
+        <input className="field" type="number" step="any" value={rng.xmin} onChange={(e) => setRng({ ...rng, xmin: +e.target.value })} aria-label="x min" />
+        <input className="field" type="number" step="any" value={rng.xmax} onChange={(e) => setRng({ ...rng, xmax: +e.target.value })} aria-label="x max" />
       </div>
-      <div className="modal-actions"><button className="pill-btn" onClick={close}>{t('close')}</button></div>
-    </Modal>
+      <div className="form-row"><span>{t('yRange')}</span>
+        <input className="field" type="number" step="any" value={rng.ymin} onChange={(e) => setRng({ ...rng, ymin: +e.target.value })} aria-label="y min" />
+        <input className="field" type="number" step="any" value={rng.ymax} onChange={(e) => setRng({ ...rng, ymax: +e.target.value })} aria-label="y max" />
+      </div>
+      <button className="ghost-btn" onClick={applyRange}>{t('apply')}</button>
+      <div className="form-row"><span>{t('axisLabels')}</span>
+        <input className="field" value={s.axisLabels.x} maxLength={12} aria-label={`${t('axisLabels')} x`} onChange={(e) => setAxisLabel('x', e.target.value)} />
+        <input className="field" value={s.axisLabels.y} maxLength={12} aria-label={`${t('axisLabels')} y`} onChange={(e) => setAxisLabel('y', e.target.value)} />
+      </div>
+      <Field label={t('ratio')}>
+        <input className="field" type="number" min={0.001} step="any" key={ratio} defaultValue={ratio} onBlur={(e) => setRatio(+e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && setRatio(+(e.target as HTMLInputElement).value)} />
+      </Field>
+    </>
+  );
+}
+
+function View3DTab() {
+  const t = useT();
+  const range3d = useStore((x) => x.settings.range3d);
+  return (
+    <>
+      <Check k="axes3d" label="axes" /><Check k="plane3d" label="plane" /><Check k="grid3d" label="grid" />
+      <Field label={t('projection')}>
+        <select className="field" value="perspective" disabled title={t('moreSoon')}>
+          <option value="perspective">{t('proj.perspective')}</option>
+        </select>
+      </Field>
+      <Field label={t('range3d')}>
+        <input className="field" type="number" min={1} max={100} value={range3d}
+          onChange={(e) => +e.target.value >= 1 && useStore.getState().setSettings({ range3d: +e.target.value })} />
+      </Field>
+    </>
   );
 }
 

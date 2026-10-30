@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { useStore } from '../store/project';
+import { labelDefault, useStore } from '../store/project';
 import { useResolved } from '../store/resolved';
 import { build, clipPlanes, dispose, label } from './meshes';
 import { exporters } from '../io/fileio';
@@ -18,7 +18,7 @@ function niceStep(x: number) {
   return [1, 2, 5, 10].map((m) => m * p).find((s) => s >= x * 0.999)!;
 }
 
-function buildAxes(R: number, show: boolean, grid: boolean) {
+function buildAxes(R: number, show: boolean, grid: boolean, showPlane: boolean) {
   const g = new THREE.Group();
   const step = niceStep(R / 6);
   const ticks: number[] = [];
@@ -36,6 +36,8 @@ function buildAxes(R: number, show: boolean, grid: boolean) {
       return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
     };
     g.add(lines(minor, 0x1c1d1c), lines(major, 0x3a3b3a));
+  }
+  if (showPlane) {
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(2 * R, 2 * R), new THREE.MeshBasicMaterial({ color: 0x787978, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }));
     g.add(plane);
   }
@@ -141,9 +143,9 @@ export function Canvas3D() {
     const c = ctx.current!;
     c.axes.children.forEach(dispose);
     c.axes.clear();
-    c.axes.add(buildAxes(R, settings.axes, settings.grid));
+    c.axes.add(buildAxes(R, settings.axes3d, settings.grid3d, settings.plane3d));
     c.render();
-  }, [R, settings.axes, settings.grid]);
+  }, [R, settings.axes3d, settings.grid3d, settings.plane3d]);
 
   // objects
   useEffect(() => {
@@ -153,7 +155,7 @@ export function Canvas3D() {
     const planes = clipPlanes(R * 1.0001);
     for (const r of items) {
       try {
-        const o = build(r, R, planes, settings.labels);
+        const o = build(r, R, planes, labelDefault(settings, '3d', r.value?.type === 'point' || r.value?.type === 'point3d'));
         if (o) c.content.add(o);
       } catch (e) {
         console.warn('3D build failed', r.obj.name, e);

@@ -1,4 +1,4 @@
-import { addInput, canvasPoint, clickWorld, expect, inputOf, open, pickTool, setMode, showPanel, state, test } from './helpers';
+import { addInput, canvasPoint, clickWorld, expect, inputOf, open, pickTool, setLanguage, setMode, showPanel, state, test } from './helpers';
 
 test.beforeEach(async ({ page }) => open(page));
 
@@ -40,7 +40,7 @@ test('autocomplete inserts a command template and object names from the keyboard
 });
 
 test('autocomplete and help are generated in Arabic', async ({ page }) => {
-  await page.locator('.topbar .pill-btn').click();
+  await setLanguage(page, 'ar');
   const input = page.locator('.alg-input-row input');
   await input.click();
   await input.pressSequentially('Ri');

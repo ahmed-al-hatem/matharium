@@ -31,6 +31,36 @@ const BUILTIN_CONST: Record<string, string> = {
   false: '0',
 };
 
+export type AngleUnit = 'rad' | 'deg';
+let angleUnit: AngleUnit = 'rad';
+/** Trig functions take (and inverse trig functions return) this unit in everything compiled afterwards. */
+export function setAngleUnit(u: AngleUnit) { angleUnit = u; }
+
+const RAD = Math.PI / 180;
+/** Degree versions of the trig functions; exact at multiples of 30° and 45° so sin(30) is 0.5, not 0.49999999999999994. */
+const snapTrig = (v: number) => { const r = Math.round(v * 2) / 2; return Math.abs(v - r) < 1e-12 ? r : v; };
+const DEG = {
+  sin: (x: number) => snapTrig(Math.sin(x * RAD)),
+  cos: (x: number) => snapTrig(Math.cos(x * RAD)),
+  tan: (x: number) => { const m = ((x % 180) + 180) % 180; return m === 90 ? NaN : m === 45 ? 1 : m === 135 ? -1 : m === 0 ? 0 : Math.tan(x * RAD); },
+  sec: (x: number) => 1 / DEG.cos(x),
+  csc: (x: number) => 1 / DEG.sin(x),
+  cot: (x: number) => 1 / DEG.tan(x),
+  asin: (x: number) => Math.asin(x) / RAD,
+  acos: (x: number) => Math.acos(x) / RAD,
+  atan: (x: number) => Math.atan(x) / RAD,
+  atan2: (y: number, x: number) => Math.atan2(y, x) / RAD,
+};
+const DEG_FN: Record<string, keyof typeof DEG> = {
+  sin: 'sin', cos: 'cos', tan: 'tan', sec: 'sec', csc: 'csc', cot: 'cot',
+  asin: 'asin', acos: 'acos', atan: 'atan', arcsin: 'asin', arccos: 'acos', arctan: 'atan', atan2: 'atan2',
+};
+
+/** Degree trig functions to put in a mathjs scope (spreadsheet formulas, fallback evaluation); empty in radian mode. */
+export function angleScope(unit = angleUnit): Record<string, (...a: number[]) => number> {
+  return unit === 'deg' ? Object.fromEntries(Object.entries(DEG_FN).map(([n, k]) => [n, DEG[k]])) : {};
+}
+
 const MATH_FN: Record<string, string> = {
   sin: 'Math.sin', cos: 'Math.cos', tan: 'Math.tan',
   asin: 'Math.asin', acos: 'Math.acos', atan: 'Math.atan',
@@ -75,6 +105,7 @@ export const H = {
   mod: (a: number, b: number) => ((a % b) + b) % b,
   fact: (n: number) => (Number.isInteger(n) && n >= 0 && n < 171 ? gamma(n + 1) : gamma(n + 1)),
   gamma,
+  deg: DEG,
 };
 
 const HELPER_FN = new Set(['sec', 'csc', 'cot', 'log', 'nthRoot', 'mod', 'gamma']);
@@ -177,6 +208,7 @@ function gen(node: any, params: string[], scope: Scope): string {
     const name = node.fn.name as string;
     const args = node.args.map((x: any) => gen(x, params, scope)).join(',');
     if (name in scope && typeof scope[name] === 'function') return `S[${JSON.stringify(name)}](${args})`;
+    if (angleUnit === 'deg' && name in DEG_FN) return `H.deg.${DEG_FN[name]}(${args})`;
     if (name in MATH_FN) return `${MATH_FN[name]}(${args})`;
     if (HELPER_FN.has(name)) return `H.${name}(${args})`;
     if (name === 'factorial') return `H.fact(${args})`;
@@ -197,8 +229,9 @@ export function compileFn(node: MathNode, params: string[], scope: Scope): (...a
   } catch (e) {
     if (!(e instanceof Unsupported)) throw e;
     const code = node.compile();
+    const deg = angleScope();
     return (...a: number[]) => {
-      const local: Record<string, unknown> = { ...scope };
+      const local: Record<string, unknown> = { ...deg, ...scope };
       params.forEach((p, i) => (local[p] = a[i]));
       try {
         const v = code.evaluate(local);
