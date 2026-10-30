@@ -334,7 +334,7 @@ Plan and implement step 9 of docs/ROADMAP-SUITE.md (exam mode). Start in plan mo
 | 0 | ✅ مدموجة | #1 – #5 |
 | 1 | ✅ مدموجة | [#6](https://github.com/ahmed-al-hatem/matharium/pull/6) |
 | 2 | ✅ مدموجة | [#7](https://github.com/ahmed-al-hatem/matharium/pull/7) |
-| 3 | ⏳ لم تبدأ | — |
+| 3 | 🔍 بانتظار المراجعة | [#8](https://github.com/ahmed-al-hatem/matharium/pull/8) |
 | 4 | ⏳ لم تبدأ | — |
 | 5 | ⏳ لم تبدأ | — |
 | 6 | ⏳ لم تبدأ | — |
