@@ -1,4 +1,4 @@
-import { addInput, expect, open, state, test } from './helpers';
+import { addInput, expect, open, setLanguage, state, test } from './helpers';
 
 test.beforeEach(async ({ page }) => open(page));
 
@@ -24,7 +24,7 @@ test('Steps under Solve shows the four steps of a linear equation', async ({ pag
 });
 
 test('derivative steps in Arabic name the chain rule', async ({ page }) => {
-  await page.locator('.topbar .pill-btn').click();
+  await setLanguage(page, 'ar');
   await addInput(page, 'Derivative(sin(x^2))');
   const r = row(page);
   await r.getByRole('button', { name: 'الخطوات' }).click();

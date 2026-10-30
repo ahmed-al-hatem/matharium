@@ -1,10 +1,13 @@
 import type { MathNode } from 'mathjs';
-import { compileFn, freeSymbols, isKnownName, math, parseExpr, texName, toTex, UndefinedSymbolError, type Scope } from './compile';
+import { compileFn, freeSymbols, isKnownName, math, parseExpr, setAngleUnit, texName, toTex, UndefinedSymbolError, type AngleUnit, type Scope } from './compile';
 import { asCommand, asList, asTuple, normalize, splitDefinition, splitRelation } from './parser';
 import { clean, extrema, fmt, fmtPt, integrate, derivative as numDeriv, roots, solveSystem } from './solve';
 import { exactRoots, factoredTex, factoredText, factorPoly, derivativePoly, polyCoefficients, toExact, type Exact } from './exact';
 import { derivativeSteps, factorSteps, solveSteps, systemSteps, type Step } from './steps';
-import { angle, asLine, circleThrough, dist, implicitOf, intersectGeom, mid, polygonArea, projectOnLine, sub } from './geometry';
+import { angle, asLine, canHostPoint, circleThrough, dist, implicitOf, intersectGeom, mid, paramRange, pointAt, polygonArea, projectOnLine, sub } from './geometry';
+import { RIEMANN_RULES, polyAt, polyText, riemannSum, solveODE, taylorCoeffs, type RiemannRule } from './calculus';
+import { binomialPmf, fiveNumber, histogram, mean, median, normalCdf, normalPdf, sd } from './stats';
+import { evalSheet } from './sheet';
 import type { Fn1, Fn2, MObj, Resolved, Value, Vec2, Vec3 } from './types';
 
 const VARS = ['x', 'y', 'z', 't'];
@@ -43,9 +46,14 @@ export class Engine {
   scope: Scope = {};
   values = new Map<string, Value>();
   nodes = new Map<string, { node: MathNode; param: string }>();
-  constructor(public digits = 4) {}
+  /** All objects and the spreadsheet, for commands that look beyond their arguments (Locus, A1:A9 ranges). */
+  objs: MObj[] = [];
+  sheet: Record<string, string> = {};
+  constructor(public digits = 4, public opts: EvalOptions = {}) {}
 
-  private f(v: number) { return fmt(v, this.digits); }
+  private f(v: number) { return fmt(v, this.digits, this.opts.sigFigs); }
+  private fp(p: Vec2) { return fmtPt(p, this.digits, this.opts.sigFigs); }
+  private get deg() { return this.opts.angle === 'deg'; }
 
   /** Decimal display plus a lazily built exact one (fractions, √, π) from the same template. */
   private dual(make: (n: Fmt) => string, exactFmt?: Fmt): Pick<Out, 'display' | 'exact'> {
@@ -68,8 +76,10 @@ export class Engine {
     const s = this.scope;
     switch (v.type) {
       case 'number': s[name] = v.value; break;
-      case 'integral': s[name] = v.value; break;
-      case 'angle': s[name] = v.value; break;
+      case 'integral': case 'riemann': case 'between': s[name] = v.value; break;
+      case 'bars': if (v.value !== undefined) s[name] = v.value; break;
+      case 'numbers': s[name] = v.values; break;
+      case 'angle': s[name] = this.deg ? (v.value * 180) / Math.PI : v.value; break;
       case 'function': {
         s[name] = v.f;
         // f' and f'' are built on first use: symbolic derivatives are slow and rarely needed
@@ -166,6 +176,41 @@ export class Engine {
     return rel ? [this.node(rel.lhs), this.node(rel.rhs)] : [this.node(src), new math.ConstantNode(0) as MathNode];
   }
 
+  /** A function of x and y: a two-variable function object or an expression in x, y. */
+  fxy(src: string): Fn2 {
+    const v = this.values.get(src.trim());
+    if (v?.type === 'surface') return v.f;
+    const n = this.node(src);
+    const bad = this.unknowns(n).filter((u) => u !== 'x' && u !== 'y');
+    if (bad.length) throw new UndefinedSymbolError(bad[0]);
+    return compileFn(n, ['x', 'y'], this.scope) as Fn2;
+  }
+
+  /** Numbers from a list literal {1, 2, 3}, a list object, or a spreadsheet range A1:A20. */
+  list(src: string): number[] {
+    const s = src.trim();
+    const range = /^([A-L])([1-9]\d*):([A-L])([1-9]\d*)$/.exec(s);
+    if (range) {
+      const cells = evalSheet(this.sheet, this.scope, this.opts.angle);
+      const out: number[] = [];
+      const [c1, c2] = [range[1], range[3]].map((c) => c.charCodeAt(0)).sort((a, b) => a - b);
+      const [r1, r2] = [+range[2], +range[4]].sort((a, b) => a - b);
+      for (let c = c1; c <= c2; c++) for (let r = r1; r <= r2; r++) {
+        const v = cells[`${String.fromCharCode(c)}${r}`]?.v;
+        if (typeof v === 'number') out.push(v);
+      }
+      if (!out.length) throw new EvalError(`No numbers in ${s}`);
+      return out;
+    }
+    const v = this.values.get(s);
+    if (v?.type === 'numbers') return v.values;
+    if (v) throw new EvalError(`${s} is not a list of numbers`);
+    const items = asList(s);
+    if (items) return items.map((i) => this.num(i));
+    if (/^[A-Za-z]\w*$/.test(s)) throw new UndefinedSymbolError(s);
+    throw new EvalError(`Expected a list: ${src}`);
+  }
+
   unknowns(n: MathNode) { return [...freeSymbols(n)].filter((s) => !(s in this.scope)); }
 
   evalTuple(parts: string[]): Out {
@@ -184,7 +229,7 @@ export class Engine {
     if (!pts.length) return { display: 'none' };
     const ex = (v: number) => toExact(v)?.text ?? this.f(v);
     return {
-      display: pts.map((p) => fmtPt(p, this.digits)).join(', '),
+      display: pts.map((p) => this.fp(p)).join(', '),
       exact: () => pts.map((p) => `(${(xFmt ?? ex)(p.x)}, ${ex(p.y)})`).join(', '),
     };
   }
@@ -306,6 +351,150 @@ export class Engine {
         const F: Fn1 = (x) => integrate(f, 0, x, 200);
         return { value: { type: 'function', f: F, param, tex: '' }, display: 'numeric antiderivative, F(0) = 0' };
       }
+      case 'IntegralBetween': {
+        need(4);
+        const f = this.fn(A[0]).f, g = this.fn(A[1]).f;
+        const a = this.num(A[2]), b = this.num(A[3]);
+        const value = integrate((x) => f(x) - g(x), a, b);
+        return { value: { type: 'between', f, g, a, b, value }, display: `= ${this.f(value)}` };
+      }
+      case 'RiemannSum': {
+        need(4);
+        const { f } = this.fn(A[0]);
+        const a = this.num(A[1]), b = this.num(A[2]);
+        const n = Math.round(this.num(A[3]));
+        if (n < 1 || n > 10000) throw new EvalError('n must be between 1 and 10000');
+        const rule = (A[4] ?? 'left').replace(/["']/g, '').trim().toLowerCase() as RiemannRule;
+        if (!RIEMANN_RULES.includes(rule)) throw new EvalError(`Rule must be one of ${RIEMANN_RULES.map((r) => `"${r}"`).join(', ')}`);
+        const value = riemannSum(f, a, b, n, rule);
+        return { value: { type: 'riemann', f, a, b, n, rule, value }, display: `= ${this.f(value)}` };
+      }
+      case 'TaylorPolynomial': {
+        need(3);
+        const { f, node, param } = this.fn(A[0]);
+        const a = this.num(A[1]);
+        const n = Math.round(this.num(A[2]));
+        if (n < 0 || n > 20) throw new EvalError('Degree must be between 0 and 20');
+        const derivs = [f(a)];
+        let d = node;
+        for (let k = 1; k <= n; k++) {
+          if (d) {
+            try { d = math.derivative(d, param); derivs.push(compileFn(d, [param], this.scope)(a)); continue; } catch { d = undefined; }
+          }
+          if (k > 4) throw new EvalError('Cannot differentiate this function symbolically');
+          let g = f;
+          for (let i = 0; i < k; i++) { const h = g; g = (x) => numDeriv(h, x); }
+          derivs.push(g(a));
+        }
+        if (!derivs.every(Number.isFinite)) throw new EvalError('The function is not differentiable at this point');
+        const c = taylorCoeffs(derivs);
+        const pn = parseExpr(polyText(c, a));
+        this.nodes.set(selfName, { node: pn, param: 'x' });
+        return { value: { type: 'function', f: polyAt(c, a), param: 'x', tex: toTex(pn) }, tex: `${texName(selfName)}(x) = ${toTex(pn)}` };
+      }
+      case 'SlopeField': {
+        need(1);
+        return { value: { type: 'slopefield', F: this.fxy(A[0]) } };
+      }
+      case 'SolveODE': {
+        need(2);
+        const F = this.fxy(A[0]);
+        const p = this.pt(A[1]);
+        return { value: { type: 'function', f: solveODE(F, p.x, p.y), param: 'x', tex: '' }, display: `y(${this.f(p.x)}) = ${this.f(p.y)}` };
+      }
+      case 'Mean': case 'Median': case 'SD': {
+        need(1);
+        const xs = A.length > 1 ? A.map((a) => this.num(a)) : this.list(A[0]);
+        const value = (name === 'Mean' ? mean : name === 'Median' ? median : sd)(xs);
+        return { value: { type: 'number', value }, display: `= ${this.f(value)}` };
+      }
+      case 'Histogram': {
+        need(1);
+        const xs = this.list(A[0]);
+        const w = A.length > 1 ? this.num(A[1]) : (Math.max(...xs) - Math.min(...xs) || 1) / Math.ceil(Math.log2(xs.length) + 1);
+        return { value: { type: 'bars', bars: histogram(xs, w) }, display: `n = ${xs.length}` };
+      }
+      case 'BoxPlot': {
+        need(1);
+        const s5 = fiveNumber(this.list(A[0]));
+        const y = A.length > 1 ? this.num(A[1]) : 1;
+        return { value: { type: 'boxplot', s: s5, y }, display: s5.map((v) => this.f(v)).join(', ') };
+      }
+      case 'Normal': {
+        need(2);
+        const mu = this.num(A[0]), sig = this.num(A[1]);
+        if (!(sig > 0)) throw new EvalError('σ must be positive');
+        const f = normalPdf(mu, sig);
+        if (A.length >= 4) {
+          const a = this.num(A[2]), b = this.num(A[3]);
+          const value = normalCdf(mu, sig, b) - normalCdf(mu, sig, a);
+          return { value: { type: 'integral', f, a, b, value }, display: `P(${this.f(a)} ≤ X ≤ ${this.f(b)}) = ${this.f(value)}` };
+        }
+        if (A.length === 3 && A[2].trim() !== 'x') {
+          const x = this.num(A[2]);
+          const value = normalCdf(mu, sig, x);
+          return { value: { type: 'number', value }, display: `P(X ≤ ${this.f(x)}) = ${this.f(value)}` };
+        }
+        return { value: { type: 'function', f, param: 'x', tex: '' }, display: `μ = ${this.f(mu)}, σ = ${this.f(sig)}` };
+      }
+      case 'Binomial': {
+        need(2);
+        const n = this.num(A[0]), p = this.num(A[1]);
+        const pmf = binomialPmf(n, p);
+        const ranged = A.length >= 4;
+        const lo = ranged ? this.num(A[2]) : 0, hi = ranged ? this.num(A[3]) : -1;
+        const bars = pmf.map((h, k) => ({ x0: k - 0.5, x1: k + 0.5, h, hi: k >= lo && k <= hi }));
+        if (ranged) {
+          const value = pmf.reduce((s, h, k) => (k >= lo && k <= hi ? s + h : s), 0);
+          return { value: { type: 'bars', bars, value }, display: `P(${this.f(lo)} ≤ X ≤ ${this.f(hi)}) = ${this.f(value)}` };
+        }
+        return { value: { type: 'bars', bars }, display: `μ = ${this.f(n * p)}, σ = ${this.f(Math.sqrt(n * p * (1 - p)))}` };
+      }
+      case 'Point': {
+        need(1);
+        const src = A[0].trim();
+        let target = this.obj(src);
+        if (!target) { const g = this.fn(src); target = { type: 'function', f: g.f, param: g.param, tex: '' }; }
+        if (!canHostPoint(target)) throw new EvalError('Point needs a function, circle, line, segment, polygon or curve');
+        const t = A.length > 1 ? this.num(A[1]) : target.type === 'curve' ? target.t0 : 0;
+        const q = pointAt(target, t);
+        if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) throw new EvalError('The point is outside the object');
+        const p = { x: clean(q.x), y: clean(q.y) };
+        return { value: { type: 'point', p, free: false, on: { src, target, t } }, display: this.fp(p) };
+      }
+      case 'Locus': {
+        need(2);
+        const qName = A[0].trim(), pName = A[1].trim();
+        const nameOf = (o: MObj) => splitDefinition(o.input).name ?? o.name;
+        const byName = new Map(this.objs.map((o) => [nameOf(o), o]));
+        if (!byName.has(qName)) throw new UndefinedSymbolError(qName);
+        const pv = this.values.get(pName);
+        if (!pv) throw new UndefinedSymbolError(pName);
+        if (pv.type !== 'point' || !pv.on) throw new EvalError(`${pName} must be a point on an object, e.g. ${pName} = Point(c)`);
+        const on = pv.on;
+        // everything Q is built from (except other loci), re-evaluated with P moved along its object
+        const deps = new Set<MObj>();
+        const stack = [qName];
+        while (stack.length) {
+          const o = byName.get(stack.pop()!);
+          if (!o || deps.has(o) || /\bLocus\s*\(/.test(o.input)) continue;
+          deps.add(o);
+          for (const w of o.input.match(/[A-Za-z]\w*/g) ?? []) if (byName.has(w)) stack.push(w);
+        }
+        const pObj = byName.get(pName)!, qObj = byName.get(qName)!;
+        if (!deps.has(pObj)) throw new EvalError(`${qName} does not depend on ${pName}`);
+        const [t0, t1] = paramRange(on.target);
+        const N = 200;
+        const pts: Vec2[] = [];
+        for (let i = 0; i <= N; i++) {
+          const t = t0 + ((t1 - t0) * i) / N;
+          const moved = [...deps].map((o) => (o === pObj ? { ...o, input: `${pName} = Point(${on.src}, ${t})` } : o));
+          const q = run(moved, this.digits, this.sheet, this.opts).results.find((r) => r.obj.id === qObj.id)?.value;
+          pts.push(q?.type === 'point' ? q.p : { x: NaN, y: NaN });
+        }
+        if (!pts.some((p) => Number.isFinite(p.x))) throw new EvalError(`${qName} must be a point`);
+        return { value: { type: 'polyline', pts } };
+      }
       case 'Simplify': case 'Expand': {
         need(1);
         const n = this.node(A[0]);
@@ -412,8 +601,9 @@ export class Engine {
         const a = this.pt(A[0]), b = this.pt(A[1]), c = this.pt(A[2]);
         const value = angle(a, b, c);
         const deg = (value * 180) / Math.PI;
-        const exact = () => { const rad = toExact(value); return `= ${toExact(deg)?.text ?? this.f(deg)}°${rad ? ` = ${rad.text}` : ''}`; };
-        return { value: { type: 'angle', a, b, c, value }, display: `= ${this.f(deg)}°`, exact };
+        // in degrees: "= 45°"; in radians: "= 0.7854 rad", exactly "= π/4"
+        const exact = this.deg ? () => `= ${toExact(deg)?.text ?? this.f(deg)}°` : () => { const rad = toExact(value); return rad ? `= ${rad.text}` : `= ${this.f(value)} rad`; };
+        return { value: { type: 'angle', a, b, c, value }, display: this.deg ? `= ${this.f(deg)}°` : `= ${this.f(value)} rad`, exact };
       }
       case 'Area': {
         need(1);
@@ -451,7 +641,7 @@ export class Engine {
       }
       case 'Rotate': {
         need(2);
-        const p = this.pt(A[0]); const th = this.num(A[1]);
+        const p = this.pt(A[0]); const th = this.num(A[1]) * (this.deg ? Math.PI / 180 : 1);
         const c = A[2] ? this.pt(A[2]) : { x: 0, y: 0 };
         const dx = p.x - c.x, dy = p.y - c.y;
         const r = { x: clean(c.x + dx * Math.cos(th) - dy * Math.sin(th)), y: clean(c.y + dx * Math.sin(th) + dy * Math.cos(th)) };
@@ -535,6 +725,9 @@ export class Engine {
 
     const list = asList(body);
     if (list) {
+      if (list.length && list.every((s) => !asTuple(s))) {
+        return { value: { type: 'numbers', values: list.map((s) => this.num(s)) }, tex: `${texName(name)} = ${tryTex(body)}` };
+      }
       const items = list.map((s) => this.evalTuple(asTuple(s) ?? [s]).value);
       if (items.every((v) => v.type === 'point')) {
         const pts = items.map((v) => (v as { p: Vec2 }).p);
@@ -619,17 +812,23 @@ function safeSteps(make: () => Step[] | null): Step[] | null {
 }
 
 /** Evaluate all objects, resolving dependencies regardless of order. */
-export function evaluateAll(objs: MObj[], digits = 4): Resolved[] {
-  return run(objs, digits).results;
+export function evaluateAll(objs: MObj[], digits = 4, sheet: Record<string, string> = {}, opts: EvalOptions = {}): Resolved[] {
+  return run(objs, digits, sheet, opts).results;
 }
 
 /** Names → numbers / functions / points, for evaluating spreadsheet formulas. */
-export function evaluateScope(objs: MObj[]): Scope {
-  return run(objs, 4).eng.scope;
+export function evaluateScope(objs: MObj[], opts: EvalOptions = {}): Scope {
+  return run(objs, 4, {}, opts).eng.scope;
 }
 
-function run(objs: MObj[], digits: number): { results: Resolved[]; eng: Engine } {
-  const eng = new Engine(digits);
+/** Display and angle options from Settings. */
+export interface EvalOptions { sigFigs?: boolean; angle?: AngleUnit }
+
+function run(objs: MObj[], digits: number, sheet: Record<string, string> = {}, opts: EvalOptions = {}): { results: Resolved[]; eng: Engine } {
+  setAngleUnit(opts.angle ?? 'rad');
+  const eng = new Engine(digits, opts);
+  eng.objs = objs;
+  eng.sheet = sheet;
   const res = new Map<string, Resolved>();
   const nameOf = (o: MObj) => splitDefinition(o.input).name ?? o.name;
   const names = new Set(objs.map(nameOf));

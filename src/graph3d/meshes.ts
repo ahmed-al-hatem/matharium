@@ -172,7 +172,20 @@ export function build(r: Resolved, R: number, planes: THREE.Plane[], labels: boo
     case 'curve3d': grp.add(curve(v.fx, v.fy, v.fz, v.t0, v.t1, R, color, planes)); break;
     case 'curve': grp.add(curve(v.fx, v.fy, zero, v.t0, v.t1, R, color, planes)); break;
     case 'function': grp.add(curve((t) => t, v.f, zero, -R, R, R, color, planes, 600)); break;
-    case 'integral': grp.add(curve((t) => t, v.f, zero, v.a, v.b, R, color, planes, 300)); break;
+    case 'integral': case 'riemann': grp.add(curve((t) => t, v.f, zero, v.a, v.b, R, color, planes, 300)); break;
+    case 'between': grp.add(curve((t) => t, v.f, zero, v.a, v.b, R, color, planes, 300), curve((t) => t, v.g, zero, v.a, v.b, R, color, planes, 300)); break;
+    case 'polyline': {
+      const segs: [Vec2, Vec2][] = [];
+      for (let i = 1; i < v.pts.length; i++) {
+        const a = v.pts[i - 1], b = v.pts[i];
+        if ([a.x, a.y, b.x, b.y].every(Number.isFinite)) segs.push([a, b]);
+      }
+      grp.add(lines(segs, color, planes));
+      break;
+    }
+    case 'bars': grp.add(lines(v.bars.flatMap((b) => [
+      [{ x: b.x0, y: 0 }, { x: b.x0, y: b.h }], [{ x: b.x0, y: b.h }, { x: b.x1, y: b.h }], [{ x: b.x1, y: b.h }, { x: b.x1, y: 0 }],
+    ] as [Vec2, Vec2][]), color, planes)); break;
     case 'vector3d': {
       const a = new THREE.Vector3(v.a.x, v.a.y, v.a.z), b = new THREE.Vector3(v.b.x, v.b.y, v.b.z);
       const d = b.clone().sub(a);

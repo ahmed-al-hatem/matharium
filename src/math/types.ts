@@ -25,7 +25,8 @@ export interface MObj {
 export type Value =
   | { type: 'function'; f: Fn1; param: string; tex: string; node?: unknown; ineq?: RelOp }
   | { type: 'implicit'; F: Fn2; op: RelOp }
-  | { type: 'point'; p: Vec2; free: boolean }
+  /** `on`: a point constrained to an object at parameter t (see geometry.pointAt); `src` is the object's input text. */
+  | { type: 'point'; p: Vec2; free: boolean; on?: { src: string; target: Value; t: number } }
   | { type: 'points'; pts: Vec2[] }
   | { type: 'segment'; a: Vec2; b: Vec2 }
   | { type: 'line'; a: Vec2; b: Vec2 }
@@ -38,6 +39,14 @@ export type Value =
   | { type: 'curve'; fx: Fn1; fy: Fn1; t0: number; t1: number }
   | { type: 'integral'; f: Fn1; a: number; b: number; value: number }
   | { type: 'text'; text: string; pts?: Vec2[] }
+  | { type: 'numbers'; values: number[] }
+  | { type: 'riemann'; f: Fn1; a: number; b: number; n: number; rule: 'left' | 'right' | 'mid' | 'trap'; value: number }
+  | { type: 'between'; f: Fn1; g: Fn1; a: number; b: number; value: number }
+  | { type: 'slopefield'; F: Fn2 }
+  | { type: 'bars'; bars: { x0: number; x1: number; h: number; hi?: boolean }[]; value?: number }
+  | { type: 'boxplot'; s: [number, number, number, number, number]; y: number }
+  /** a path through sample points; non-finite points break it */
+  | { type: 'polyline'; pts: Vec2[] }
   | { type: 'surface'; f: Fn2 }
   | { type: 'implicit3d'; F: Fn3 }
   | { type: 'point3d'; p: Vec3 }
