@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { arrowInput, isRtl, labelPlain, parseString, quote, roundAt, simplify, splitMath, strokeInput, texToPlain, textInput } from './annotate';
 import { evaluateAll } from './engine';
 import { asCommand, categorize, normalize, splitArgs, splitRelation } from './parser';
-import { freeName } from '../store/project';
+import { DEFAULT_SETTINGS, freeName } from '../store/project';
 import { draw } from '../graph2d/renderer';
 import { SvgCtx } from '../graph2d/svgctx';
 import type { MObj, Value, Vec2 } from './types';
@@ -134,7 +134,7 @@ describe('text helpers', () => {
 });
 
 describe('drawing', () => {
-  const settings = { grid: false, axes: false, labels: true, snap: false, digits: 4, range3d: 6, lang: 'en' as const };
+  const settings = { ...DEFAULT_SETTINGS, grid: false, axes: false, labels: 'all' as const, snap: false };
   const render = (inputs: string[], htmlText: boolean, light = false) => {
     const svg = new SvgCtx(400, 300);
     draw(svg, evaluateAll(objs(...inputs)), { W: 400, H: 300, view: { ox: 0, oy: 0, sx: 50, sy: 50 }, settings, selectedId: null, htmlText, light });

@@ -24,6 +24,20 @@ export function pixelDistance(v: Value, vp: Viewport, px: number, py: number): n
     case 'ray': return segDist(m, P(v.a), P(v.b), true, false);
     case 'circle': return Math.abs(Math.hypot(vp.wx(px) - v.c.x, vp.wy(py) - v.c.y) - v.r) * vp.v.sx;
     case 'polygon': return Math.min(...v.pts.map((p, i) => segDist(m, P(p), P(v.pts[(i + 1) % v.pts.length]))));
+    case 'bars': return v.bars.some((b) => vp.wx(px) >= Math.min(b.x0, b.x1) && vp.wx(px) <= Math.max(b.x0, b.x1) &&
+      vp.wy(py) >= Math.min(0, b.h) && vp.wy(py) <= Math.max(0, b.h)) ? 0 : Infinity;
+    case 'boxplot': {
+      const y = vp.py(v.y), hh = Math.min(30, 0.4 * vp.v.sy);
+      return vp.wx(px) >= v.s[0] && vp.wx(px) <= v.s[4] && Math.abs(py - y) <= hh ? 0 : Infinity;
+    }
+    case 'polyline': {
+      let best = Infinity;
+      for (let i = 1; i < v.pts.length; i++) {
+        const a = v.pts[i - 1], b = v.pts[i];
+        if ([a.x, a.y, b.x, b.y].every(Number.isFinite)) best = Math.min(best, segDist(m, P(a), P(b)));
+      }
+      return best;
+    }
     case 'stroke': return Math.min(...v.pts.slice(1).map((p, i) => segDist(m, P(v.pts[i]), P(p))));
     case 'label': {
       // the HTML layer's box, estimated from the plain text (17px font)
@@ -33,7 +47,7 @@ export function pixelDistance(v: Value, vp: Viewport, px: number, py: number): n
       const dx = Math.max(x0 - px, 0, px - (x0 + box.w)), dy = Math.max(ay - py, 0, py - (ay + box.h));
       return Math.hypot(dx, dy);
     }
-    case 'function': case 'integral': {
+    case 'function': case 'integral': case 'riemann': case 'between': {
       const y = v.f(vp.wx(px));
       return Number.isFinite(y) ? Math.abs(vp.py(y) - py) : Infinity;
     }

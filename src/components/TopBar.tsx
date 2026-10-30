@@ -28,7 +28,6 @@ export function TopBar({ onHelp, onTemplates, onWorksheet }: { onHelp(): void; o
   const mode = useStore((s) => s.mode);
   const fileName = useStore((s) => s.fileName);
   const dirty = useStore((s) => s.dirty);
-  const lang = useStore((s) => s.settings.lang);
   const pwa = useStore((s) => s.pwa);
   const showInstall = !pwa.installed && (pwa.canInstall || pwa.ios);
   const st = useStore.getState();
@@ -66,9 +65,6 @@ export function TopBar({ onHelp, onTemplates, onWorksheet }: { onHelp(): void; o
       <button className="icon-btn hide-sm" onClick={() => saveProject()} aria-label={t('save')} title={`${t('save')} (${mod}S)`}><Icon.save /></button>
       {showInstall && <button className="icon-btn" onClick={install} aria-label={t('install')} title={t('install')}><Icon.download /></button>}
       <button className="icon-btn" onClick={shareLink} aria-label={t('share')} title={t('share')}><Icon.share /></button>
-      <button className="pill-btn" onClick={() => st.setSettings({ lang: lang === 'en' ? 'ar' : 'en' })} title={t('language')}>
-        <Icon.globe /><span className="hide-sm">{t('language')}</span>
-      </button>
 
       {drawer && (
         <>
@@ -101,9 +97,8 @@ export function TopBar({ onHelp, onTemplates, onWorksheet }: { onHelp(): void; o
             ))}
             <h3>{t('general')}</h3>
             {showInstall && <button onClick={run(install)}><Icon.download />{t('install')}</button>}
-            <button onClick={run(() => st.setSettingsOpen(true))}><Icon.gear />{t('settings')}</button>
+            <button onClick={run(() => st.openSettings())}><Icon.gear />{t('settings')}</button>
             <button onClick={run(shareLink)}><Icon.share />{t('share')}</button>
-            <button onClick={run(() => st.setSettings({ lang: lang === 'en' ? 'ar' : 'en' }))}><Icon.globe />{t('language')}</button>
             <button onClick={run(onHelp)}><Icon.help />{t('help')}</button>
           </nav>
         </>

@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
-import { addInput, canvasPoint, clickWorld, downloadText, drawerAction, expect, open, showPanel, state, test } from './helpers';
+import { addInput, canvasPoint, clickWorld, downloadText, drawerAction, expect, open, setLanguage, showPanel, state, test } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -161,7 +161,7 @@ test('templates dialog in Arabic, and saving / deleting my own template', async 
   await drawerAction(page, 'Save as template…');
   await expect(page.locator('.toast')).toHaveText('Template saved in this browser');
 
-  await page.locator('.topbar .pill-btn').click(); // العربية
+  await setLanguage(page, 'ar');
   await page.getByRole('button', { name: 'القائمة' }).click();
   await page.locator('.drawer button', { hasText: 'جديد من قالب…' }).click();
   await expect(page.locator('.modal h2')).toContainText('جديد من قالب');
